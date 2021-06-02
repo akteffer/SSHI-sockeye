@@ -7,7 +7,7 @@ library(StatonMisc)
 library(lme4)
 library(tidyr)
 library(dplyr)
-library(raster)
+#library(raster)
 
 
 dat<-sw.data

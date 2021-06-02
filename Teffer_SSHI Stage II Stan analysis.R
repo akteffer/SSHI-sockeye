@@ -153,14 +153,16 @@ for(i in unique(inf_agt_resid_data_gl$agent)) {
 for(i in agents){
   data <- subset(inf_agt_resid_data_gl, agent==i)
   nam <- paste("mod", i, sep = ".")
-  assign(nam, stan_lmer(resid_value ~ 0 + prev_std + (prev_std|Stock) +(1|Year), 
+  assign(nam, stan_lmer(resid_value ~ 0 +  prev_std + (prev_std|Stock) +(prev_std|Year), 
                         data = data,
-                        adapt_delta=0.95,
+                        adapt_delta=0.99,
                         REML = F))
 }
 
 # uninformed priors - for example:
-prior_summary(mod.arena2)
+prior_summary(mod.pa_ther)
+plot(mod.pa_ther, "ess")
+plot(mod.pa_ther, "trace")
 
 ## Derive coefficient estimates and save in .csv file
 coefs_stan <- matrix(NA,
@@ -175,17 +177,21 @@ for(i in agents){
                       digits = 2)
   coefs_stan[i,] <- ind_coef[1,c(4:8)]
 }
-write.csv(coefs_stan, file="data/prev_coefs_stan_global_indep mod.csv")
+write.csv(coefs_stan, file="data/prev_coefs_stan_global_indep mod_randyrslp.csv")
 
 # Load estimates from file (if not running full model) and assign rownames
-coefs_stan <- read.csv("data/prev_coefs_stan_global_indep mod.csv")
+coefs_stan <- read.csv("data/prev_coefs_stan_global_indep mod_randyrslp.csv")
+coefs_stan <- coefs_stan[coefs_stan$X!="smallUK",]
 rownames(coefs_stan) <- coefs_stan[,1]
 coefs_stan <- coefs_stan[,-1]  
 
-# Plot effect size per agent
-coefs_order <- coefs_stan[order(coefs_stan[,3]),]
-par(mfrow=c(1,1), mar=c(3,1,1,1),oma=c(0.5,0.5,0.5,0.5))
 
+# Plot effect size per agent
+coefs_order <- coefs_stan[order(-coefs_stan[,3]),]
+
+jpeg(filename='figs/Fig_SSHI ONNE_prev_randslpyear.jpg', 
+     width=480, height=500, quality=75)
+par(mfrow=c(1,1), mar=c(3,1,1,1),oma=c(0.5,0.5,0.5,0.5))
 plotCI(x = coefs_order[,3],
        y = seq(1,length(agents)),
        li = (coefs_order[,1]),
@@ -197,10 +203,9 @@ plotCI(x = coefs_order[,3],
        xaxt = "n",
        ylab = "",
        xlab = "",
-       xlim = c(-1.75,1),
+       xlim = c(-2,2),
        pch = 16,
        scol = "grey")
-
 plotCI(x = coefs_order[,3],
        y = seq(1,length(agents)),
        li = (coefs_order[,2]),
@@ -212,20 +217,18 @@ plotCI(x = coefs_order[,3],
        add = TRUE,
        lwd = 3,
        scol = "grey")
-
-text(rep(-1.75,length(agents)), 
+text(rep(-2,length(agents)), 
      seq(1,length(agents)), 
      labels = rownames(coefs_order), 
      pos = 4,
      font = 2,
      cex=0.95)
-
-axis(1, at = c(-1, -0.5, 0, 0.5, 1))
+axis(1, at = c(-1.5, -1, -0.5, 0, 0.5, 1, 1.5))
 abline(v = 0, lty = 2)
 box(col="grey")	
 mtext("Effect size",1,line=2.2, cex=1.1)
 mtext("Prevalence",3,line=0.25)
-
+dev.off()
 
 ## Derive posterior estimates by stock
 

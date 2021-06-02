@@ -84,6 +84,23 @@ fw4<-droplevels(fw3[-which(fw3$Stock_Analysis=="Central Coast") ,]) #remove CC
 dim(fw4)
 fw.data <- fw4 #rename
 
+
+ggplot(sw.data) +
+  geom_point(stat="identity", aes(Length, Mass, col=factor(Year)))
+ggplot(sw.data) +
+  geom_point(stat="identity", aes(Length, Mass, col=Stock_Analysis))
+ggplot(sw.data) +
+  geom_point(stat="identity", aes(Length, Mass, col=Prog))
+ggplot(sw.data) +
+  geom_point(stat="identity", aes(Length, Mass, col=SEASON1))
+ggplot(sw.data) +
+  geom_violin(aes(y=DOY, x=factor(Year)))
+ggplot(sw.data) +
+  geom_point(stat="identity", aes(Length, Mass, col=ven))
+
+ggplot(fw.data) +
+  geom_point(stat="identity", aes(Length, Mass, col=factor(Year)))
+
 #### Brood table data
 #Run code from sst_anomalies.R and exploratory_stage_1_analysis.Rmd for sst and brood table data 
 #Add column with stock name by ID#
@@ -102,6 +119,9 @@ stock.ids <- stock.ids2[!duplicated(stock.ids2),]
 early.sst <- merge(early.sst, stock.ids, by="Stock.ID")
 names(early.sst) <- c("Stock.ID", "brood_year", "sst_anom", "Stock_Analysis")
 
+#FR temp data from Hope
+fr_temp <- read.csv("data/FR_Hope_temp_annual.csv")
+
 # Create "agent" and "years" objects
 agents <- unique(inf_agt_resid_data_gl$agent)
 years <- unique(inf_agt_resid_data_gl$brood_year)
@@ -116,12 +136,12 @@ trnc_resid_srr <- trnc_resid[trnc_resid$metric=="SR_resid",]
 
 # Plot sampled fish per stock by year
 samplesperstock.sw<-sw.data %>% 
-  group_by(Stock, Year) %>%
+  group_by(Stock_Analysis, Year) %>%
   count(Year)
 
 jpeg(filename='figs/Fig_Total fish sampled by stock per year_SW.jpg', 
      width=480, height=800, quality=75)
-ggplot(data=samplesperstock.sw, aes(x=reorder(Stock, n), y=n, fill=factor(Year)))+
+ggplot(data=samplesperstock.sw, aes(x=reorder(Stock_Analysis, n), y=n, fill=factor(Year)))+
   geom_bar(stat="identity") +
   labs(fill="Sampling year") +
   coord_flip()+
@@ -131,7 +151,7 @@ dev.off()
 
 jpeg(filename='figs/Fig_Total fish sampled by stock per year_SW_yearY.jpg', 
      width=800, height=500, quality=75)
-ggplot(data=samplesperstock.sw, aes(x=factor(Year), y=n, fill=Stock))+
+ggplot(data=samplesperstock.sw, aes(x=factor(Year), y=n, fill=Stock_Analysis))+
   geom_bar(stat="identity") +
   labs(fill="Stock") +
   coord_flip()+
@@ -173,7 +193,7 @@ ggplot(data=fw.data, aes(x=Stock_Analysis, y=Year))+
   geom_point(stat="identity") +
   coord_flip() +
   xlab("Stock") +
-  ylab("FW Longitude")
+  ylab("FW Year")
 
 # Investigate variability of agents by Latitude
 #CODE IN PROCESS#
@@ -227,6 +247,8 @@ all.ic_mul.fw =
 names(all.ic_mul.fw) <- c("Year","Stock_Analysis","N","N+","prev","mean_load","prevload") #rename columns
 all.ic_mul.fw$brood_year <- all.ic_mul.fw$Year-2
 ic_mul.resid.fw <- merge(trnc_resid_srr, all.ic_mul.fw, by = c("brood_year", "Stock_Analysis"))
+ic_mul.resid.fw.fr <- merge(ic_mul.resid.fw, fr_temp, by = c("brood_year"))
+
 
 jpeg(filename='figs/Fig_ic_mul FW prev corr w SR resid.jpg', 
      width=480, height=500, quality=75)
@@ -236,6 +258,25 @@ ggplot(ic_mul.resid.fw, aes(prev, resid_value, color=Stock_Analysis)) +
   labs(y = "Stock-recruitment residuals",x = "Freshwater prevalence per year", 
        title=expression(paste(italic("I. multifiliis"))), color="Stock")
 dev.off()
+
+ggplot(ic_mul.resid.fw.fr, aes(FR_anom,prev, color=factor(brood_year))) +
+  geom_point(aes(color=factor(brood_year))) +
+  geom_smooth(aes(FR_anom,prev), method = "lm", se=F, size=.2) +
+  labs(x = "FR temp anom",y = "Freshwater prevalence per year", 
+       title=expression(paste(italic("I. multifiliis"))), color="brood year")
+
+ggplot(ic_mul.resid.fw.fr, aes(FR_anom,prev, color=Stock_Analysis)) +
+  geom_point(aes(color=factor(Stock_Analysis))) +
+  geom_smooth(aes(FR_anom,prev), method = "lm", se=F, size=.2) +
+  labs(x = "FR temp anom",y = "Freshwater prevalence per year", 
+       title=expression(paste(italic("I. multifiliis"))), color="Stock_Analysis")
+
+ggplot(ic_mul.resid.fw.fr, aes(FR_anom, resid_value, color=Stock_Analysis)) +
+  geom_point(aes(color=factor(Stock_Analysis))) +
+  geom_smooth(aes(FR_anom,prev), method = "lm", se=F, size=.2) +
+  labs(x = "FR temp anom",y = "SR_resid", 
+       title=expression(paste(italic("I. multifiliis"))), color="Stock_Analysis")
+
 
 # Stats for ic_mul
 ## STAN model for ic_mul FW
@@ -411,9 +452,11 @@ ggplot(all.te_mar.sw,aes(prev, Latitude, color=factor(brood_year))) +
 ggplot(sw.data,aes(Latitude, log10(te_mar), shape=Zone, color=factor(Year))) +
   geom_point() +
   geom_smooth(aes(Latitude, log10(te_mar)), method = "lm", se=F, size=.2) 
-
-ggplot(sw.data, aes(Latitude, log10(te_mar))) +
+ggplot(sw.data, aes(Latitude, log10(te_mar), col=factor(Year))) +
   geom_point() 
+ggplot(sw.data, aes(Stock_Analysis, log10(te_mar), fill=factor(Year))) +
+  geom_bar(stat="identity") +
+  coord_flip()
 
 # stats te_mar
 names(sw.data)
@@ -722,9 +765,17 @@ head(ONNE_with_dists)
 # Plot sampled fish per stock by year
 head(pa_ther.sst)
 head(trnc_resid_srr)
-lm(sst_anom ~ )
-sw.temp <- stan_lmer(resid_value ~ 0 + sst + (prev|Stock_Analysis) +(1|brood_year), 
-                          data = sw.data,
+pa_ther.sst.sr <- merge(pa_ther.sst, trnc_resid_srr, by = c("Stock_Analysis", "brood_year"), all.x=TRUE)
+names(pa_ther.sst.sr)
+pss <- pa_ther.sst.sr[,c(1,2,3,13,16)]
+pa_ther.sw.sr.mod <- stan_lmer(resid_value ~ 0 + sst_anom + (sst_anom|Stock_Analysis) +(1|brood_year), 
+                          data = pa_ther.sst.sr,
                           adapt_delta=0.95,
                           REML = F)
-summary(fw.ic_mul.FW)
+summary(pa_ther.sw.sr.mod)
+plot(pss$sst_anom,pss$resid_value)
+abline(lm(resid_value~sst_anom, data=pss))
+summary(lm(resid_value~sst_anom, data=pss))
+
+
+

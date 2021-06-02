@@ -180,7 +180,7 @@ cov_effects <- plyr::ddply(master.bt_w_cov, c("stock_name"),function(x) {
 print(cov_effects)
 
 ##### Plot just SST covariate effect
-ggplot(cov_effects#L
+ggplot(cov_effects
        ,aes(x=sst
               #value, color = covariate, fill = covariate
             ))+

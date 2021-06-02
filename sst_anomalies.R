@@ -5,12 +5,12 @@
 #########################################################################################
 
 ## download and process SST data UNCOMMENT IF YOU NEED TO DOWNLOAD RAW SST
-#ersst::sst_download(years = 1950:2018,
+#ersst::sst_download(years = 1950:2019,
 #                    months = 1:12,
 #                    save.dir = "./data/sst_raw/",
 #                    version = 5)
 #
-#sst.raw.full <- ersst::sst_load(years = 1950:2018,
+#sst.raw.full <- ersst::sst_load(years = 1950:2019,
 #                                months = 1:12,
 #                                read.dir = "./data/sst_raw/",
 #                                version = 5)
@@ -36,7 +36,7 @@ summary(sst.raw)
 #------------------------------------------------------------------------------#
 
 ## Calculate SST anomalies
-sst.anom <- sst.anomaly(sst.raw, ref.years = 1950:2010)
+sst.anom <- sst.anomaly(sst.raw, ref.years = 1950:2019)
 head(sst.anom)
 tail(sst.anom)
 summary(sst.anom)

@@ -1,0 +1,1465 @@
+# SSHI ANALYSIS SOCKEYE STAGE II
+# A.K. Teffer
+#### Sockeye salmon productivity versus infection profiles
+
+#### Load packages and set directory
+setwd("~/Documents.nosync/DFO PDF/Data/SSHI-sockeye")
+
+library(lme4)
+library(rstanarm) # https://mc-stan.org/users/documentation/case-studies/tutorial_rstanarm.html
+library(ggplot2)
+library(plotrix)
+library(tidyverse)
+library(gridExtra)
+library(bayesplot)
+theme_set(bayesplot::theme_default(base_family = "sans"))
+library(shinystan)
+library(data.table)
+library(base)
+library(ggpubr)
+library(dplyr)
+
+#### Read in data, clean, standardize - SW metric averaged across all stocks each year per agent  
+inf_agt_resid_data_gl <- read.csv("data/global_ONNE_productivity_infection_analysis.csv")
+head(inf_agt_resid_data_gl)
+
+# Data cleaning
+inf_agt_resid_data_gl$mean_load_all <- inf_agt_resid_data_gl$mean_load #add col for mean_load_all
+inf_agt_resid_data_gl$mean_load_all[is.na(inf_agt_resid_data_gl$mean_load_all)] <- 0 #replace NA with 0
+
+# Standardize and incorporate into df
+inf_std <- plyr::ddply(inf_agt_resid_data_gl, c("agent"),function(x) {
+  scaled_prev <- scale(x$prev)
+  scaled_load <- scale(x$mean_load_all)
+  xx <- data.frame(scaled_prev, scaled_load)
+})
+inf_agt_resid_data_gl$prev_std <- inf_std[,2]
+inf_agt_resid_data_gl$load_std <- inf_std[,3]
+
+# Add Stock column, remove smallUK, add plot.agent column (full name)
+inf_agt_resid_data_gl$Stock <- inf_agt_resid_data_gl$Stock_Analysis
+inf_agt_resid_data_gl <- droplevels(inf_agt_resid_data_gl[inf_agt_resid_data_gl$agent!="smallUK",])
+inf_agt_resid_data_gl$plot.agent <- inf_agt_resid_data_gl$agent
+inf_agt_resid_data_gl$plot.agent <- recode(inf_agt_resid_data_gl$plot.agent, "ic_mul" = "I. multifiliis", 
+                                 "te_mar" = "T. maritinum",
+                                 "pa_ther" = "P. theridion",
+                                 "fl_psy" = "F. psychrophilum",
+                                 "sch" = "Ca. S. salmonis",
+                                 "te_bry" = "T. bryosalmonae",
+                                 "pa_kab" = "P. kabatai",
+                                 "c_b_cys" = "Ca. B. cysticola",
+                                 "pa_min" = "P. minibicornis",
+                                 "arena2" = "SPAV-2",
+                                 "fa_mar" = "F. margolisi",
+                                 "my_arc" = "M. arcticus",
+                                 "ven" = "VENV",
+                                 "ic_hof" = "I. hoferi",
+                                 "lo_sal" = "L. salmonae",
+                                 "rlo" = "RLO",
+                                 "sp_des" = "S. destruens",
+                                 "ku_thy" = "K. thyrsites",
+                                 "prv" = "PRV",
+                                 "pspv" = "PSPV",
+                                 "ce_sha" = "C. shasta",
+                                 "pa_pse" = "P. pseudobranchicola",
+                                 "de_sal" = "D. salmonis")
+dim(inf_agt_resid_data_gl)
+
+#### SST data
+raw.clim <- read.csv("data/sst_yr_1_stock_anomalies.csv")
+early.sst <- clim.wgt.avg(brood.table = brood_table,
+                          env.data = raw.clim,
+                          env.covar = "sst_anomaly",
+                          type = "first_year",
+                          out.covar = "early_sst") 
+head(early.sst)
+stock.ids2 <- brood_table[,1:2]
+stock.ids <- stock.ids2[!duplicated(stock.ids2),]
+early.sst <- merge(early.sst, stock.ids, by="Stock.ID")
+names(early.sst) <- c("Stock.ID", "brood_year", "sst_anom", "Stock_Analysis")
+
+inf_agt_resid_data_gl <- merge(inf_agt_resid_data_gl, early.sst, 
+                               by = c("Stock_Analysis", "brood_year"), all.x=TRUE)
+
+# Create objects for analysis
+agents <- unique(inf_agt_resid_data_gl$agent)
+stocks <- unique(inf_agt_resid_data_gl$Stock)
+years <- unique(inf_agt_resid_data_gl$Year)
+
+# Plot total detections of each agent by year - note variable prevalence across agents and years
+samplesperagent.sw<-inf_agt_resid_data_gl %>% 
+  group_by(agent, Year, N.) %>%
+  summarise(N = sum(N))
+
+#plot
+jpeg(filename='figs/Fig_Total agent detections by year.jpg', 
+     width=480, height=500, quality=75)
+ggplot(data=samplesperagent.sw, aes(x=reorder(agent, N.), y=N., fill=factor(Year)))+
+  geom_bar(stat="identity")+
+  labs(fill="Sampling year") +
+  coord_flip()+
+  xlab("Infectious agents")+
+  ylab("Positive detections")+
+  scale_x_discrete(labels=c("ic_mul" = expression(italic("I. multifiliis")), 
+                            "te_mar" = expression(italic("T. maritinum")),
+                            "pa_ther" = expression(italic("P. theridion")),
+                            "fl_psy" = expression(italic("F. psychrophilum")),
+                            "sch" = expression(italic("Ca. S. salmonis")),
+                            "te_bry" = expression(italic("T. bryosalmonae")),
+                            "pa_kab" = expression(italic("P. kabatai")),
+                            "c_b_cys" = expression(italic("Ca. B. cysticola")),
+                            "pa_min" = expression(italic("P. minibicornis")),
+                            "arena2" = "SPAV-2",
+                            "fa_mar" = expression(italic("F. margolisi")),
+                            "my_arc" = expression(italic("M. arcticus")),
+                            "ven" = "VENV",
+                            "ic_hof" = expression(italic("I. hoferi")),
+                            "lo_sal" = expression(italic("L. salmonae")),
+                            "rlo" = "RLO",
+                            "sp_des" = expression(italic("S. destruens")),
+                            "ku_thy" = expression(italic("K. thyrsites")),
+                            "prv" = "PRV",
+                            "pspv" = "PSPV",
+                            "ce_sha" = expression(italic("C. shasta")),
+                            "pa_pse" = expression(italic("P. pseudobranchicola")),
+                            "de_sal" = expression(italic("D. salmonis"))))
+dev.off()
+
+
+# Plot raw data by: 
+## Prevalence
+jpeg(filename='figs/Fig_Raw data by year_prev.jpg', 
+     width=480, height=500, quality=75)
+ggplot(inf_agt_resid_data_gl,aes(prev, resid_value, color=Stock, shape=factor(Year)))+
+  geom_smooth(aes(prev, resid_value, group=Stock), method = "lm", se=F, size=.2)+
+  geom_point()+
+  scale_shape_manual(values=1:nlevels(factor(inf_agt_resid_data_gl$Year))) +
+  facet_wrap(~ agent,nrow=5, scales = "free")+
+  xlab("prevalence")+
+  ylab("residual")+
+  theme_bw()
+dev.off()
+
+## Load
+jpeg(filename='figs/Fig_Raw data by year_load.jpg', 
+     width=480, height=500, quality=75)
+ggplot(inf_agt_resid_data_gl,aes(log10(mean_load), resid_value, color=Stock, shape=factor(Year)))+
+  geom_smooth(aes(log10(mean_load), resid_value, group=Stock), method = "lm", se=F, size=.2)+
+  geom_point()+
+  scale_shape_manual(values=1:nlevels(factor(inf_agt_resid_data_gl$Year))) +
+  facet_wrap(~ agent,nrow=5, scales="free")+
+  xlab("log10 load")+
+  ylab("residual")+
+  theme_bw()
+dev.off()
+
+# STAN Approach for Multi-level Modeling
+
+# PREVALENCE - INDEPENDENT MODELS by AGENT
+
+## SW metric averaged across all stocks per year - Independent models
+
+### Create files for each agent
+for(i in unique(inf_agt_resid_data_gl$agent)) {
+  nam <- paste("df", i, sep = ".")
+  assign(nam, inf_agt_resid_data_gl[inf_agt_resid_data_gl$agent==i,])
+}
+
+### Loop for STAN independent models
+for(i in agents){
+  data <- subset(inf_agt_resid_data_gl, agent==i)
+  nam <- paste("mod", i, sep = ".")
+  assign(nam, stan_lmer(resid_value ~ sst_anom +  prev_std + (prev_std|Stock) +(1|Year), 
+                        data = data,
+                        adapt_delta=0.99,
+                        REML = F))
+}
+summary(mod.ic_mul)
+
+# uninformed priors - for example:
+prior_summary(mod.arena2)
+
+## Derive coefficient estimates and save in .csv file
+coefs_stan <- matrix(NA,
+                     nrow = length(agents),
+                     ncol = 5,
+                     dimnames = list(agents,c("lower","25","mid","75","upper")))
+for(i in agents){
+  model<-get(paste("mod.",i, sep=""))
+  ind_coef <- summary(model, 
+                      pars = c("prev_std"),
+                      probs = c(0.025,0.25,0.5,0.75, 0.975),
+                      digits = 2)
+  coefs_stan[i,] <- ind_coef[1,c(4:8)]
+}
+write.csv(coefs_stan, file="data/prev_coefs_stan_global_indep mod_SST.csv")
+
+## Derive coefficient estimates for SST and save in .csv file
+coefs_stan.sst <- matrix(NA,
+                     nrow = length(agents),
+                     ncol = 5,
+                     dimnames = list(agents,c("lower","25","mid","75","upper")))
+for(i in agents){
+  model<-get(paste("mod.",i, sep=""))
+  ind_coef <- summary(model, 
+                      pars = c("sst_anom"),
+                      probs = c(0.025,0.25,0.5,0.75, 0.975),
+                      digits = 2)
+  coefs_stan.sst[i,] <- ind_coef[1,c(4:8)]
+}
+write.csv(coefs_stan.sst, file="data/prev_coefs_stan_global_indep mod_SST_sstbeta.csv")
+
+
+# Load estimates from file (if not running full model) and assign rownames
+coefs_stan <- read.csv("data/prev_coefs_stan_global_indep mod_SST.csv")
+coefs_stan <- coefs_stan[coefs_stan$X!="smallUK",]
+rownames(coefs_stan) <- coefs_stan[,1]
+coefs_stan <- coefs_stan[,-1]  
+
+
+# Plot effect size per agent
+coefs_order <- coefs_stan[order(-coefs_stan[,3]),]
+
+jpeg(filename='figs/Fig_SSHI ONNE Pathogen Productivity_Prevalence_SST_agentbeta.jpg', 
+     width=480, height=500, quality=75)
+par(mfrow=c(1,1), mar=c(3,1,1,1),oma=c(0.5,0.5,0.5,0.5))
+plotCI(x = coefs_order[,3],
+       y = seq(1,length(agents)),
+       li = (coefs_order[,1]),
+       ui = (coefs_order[,5]),
+       err = "x",
+       sfrac = 0 ,
+       gap = 0,
+       yaxt = "n",
+       xaxt = "n",
+       ylab = "",
+       xlab = "",
+       xlim = c(-1.75,1),
+       pch = 16,
+       scol = "grey")
+plotCI(x = coefs_order[,3],
+       y = seq(1,length(agents)),
+       li = (coefs_order[,2]),
+       ui = (coefs_order[,4]),
+       err = "x",
+       sfrac = 0 ,
+       gap = 0,
+       pch = 16,
+       add = TRUE,
+       lwd = 3,
+       scol = "grey")
+text(rep(-1.75,length(agents)), 
+     seq(1,length(agents)), 
+     labels = rownames(coefs_order), 
+     pos = 4,
+     font = 2,
+     cex=0.95)
+axis(1, at = c(-1, -0.5, 0, 0.5, 1))
+abline(v = 0, lty = 2)
+box(col="grey")	
+mtext("Effect size",1,line=2.2, cex=1.1)
+mtext("Prevalence",3,line=0.25)
+dev.off()
+
+# Plot effect of SST per agent
+coefs_order.sst <- coefs_stan.sst[order(-coefs_stan.sst[,3]),]
+
+jpeg(filename='figs/Fig_SSHI ONNE Pathogen Productivity_Agent slopes_Prevalence_SST_sstbeta.jpg', 
+     width=480, height=500, quality=75)
+par(mfrow=c(1,1), mar=c(3,1,1,1),oma=c(0.5,0.5,0.5,0.5))
+plotCI(x = coefs_order.sst[,3],
+       y = seq(1,length(agents)),
+       li = (coefs_order.sst[,1]),
+       ui = (coefs_order.sst[,5]),
+       err = "x",
+       sfrac = 0 ,
+       gap = 0,
+       yaxt = "n",
+       xaxt = "n",
+       ylab = "",
+       xlab = "",
+       xlim = c(-3,1),
+       pch = 16,
+       scol = "grey")
+plotCI(x = coefs_order.sst[,3],
+       y = seq(1,length(agents)),
+       li = (coefs_order.sst[,2]),
+       ui = (coefs_order.sst[,4]),
+       err = "x",
+       sfrac = 0 ,
+       gap = 0,
+       pch = 16,
+       add = TRUE,
+       lwd = 3,
+       scol = "grey")
+text(rep(-3,length(agents)), 
+     seq(1,length(agents)), 
+     labels = rownames(coefs_order.sst), 
+     pos = 4,
+     font = 2,
+     cex=0.95)
+axis(1, at = c(-2.5,-2,-1.5,-1, -0.5, 0, 0.5, 1))
+abline(v = 0, lty = 2)
+box(col="grey")	
+mtext("Effect size",1,line=2.2, cex=1.1)
+mtext("SST",3,line=0.25)
+dev.off()
+
+## Derive posterior estimates by stock
+
+### Intercepts
+coefs_stan_stk_int <- matrix(NA,
+                             nrow = length(stocks),
+                             ncol = 6,
+                             dimnames = list(stocks,c("lower","25","mid","75","upper","agent")))
+for(i in agents){
+  model<-get(paste("mod.",i, sep=""))
+  ind_coef <- summary(model, 
+                      regex_pars = c("b\\[\\(\\Intercept) Stock\\:"),
+                      probs = c(0.025,0.25,0.5,0.75, 0.975),
+                      digits = 2)
+  nam <- paste("coefs_stan_stk_int", i, sep = ".")
+  as.matrix(assign(nam, coefs_stan_stk_int[i] <- cbind(ind_coef[c(1:18),c(4:8)], paste(i))))
+}
+
+### Slopes
+coefs_stan_stk_slp <- matrix(NA,
+                             nrow = length(stocks),
+                             ncol = 6,
+                             dimnames = list(stocks,c("lower","25","mid","75","upper","agent")))
+for(i in agents){
+  model<-get(paste("mod.",i, sep=""))
+  ind_coef <- summary(model, 
+                      regex_pars = c("b\\[\\prev_std Stock\\:"),
+                      probs = c(0.025,0.25,0.5,0.75, 0.975),
+                      digits = 2)
+  nam <- paste("coefs_stan_stk_slp", i, sep = ".")
+  as.matrix(assign(nam, coefs_stan_stk_slp[i] <- cbind(ind_coef[c(1:18),c(4:8)], paste(i))))
+}
+
+### Year intercepts
+coefs_stan_stk_year <- matrix(NA,
+                              nrow = length(years),
+                              ncol = 6,
+                              dimnames = list(years,c("lower","25","mid","75","upper","agent")))
+for(i in agents){
+  model<-get(paste("mod.",i, sep=""))
+  ind_coef <- summary(model, 
+                      regex_pars = "Year",
+                      probs = c(0.025,0.25,0.5,0.75, 0.975),
+                      digits = 2)
+  nam <- paste("coefs_stan_stk_year", i, sep = ".")
+  as.matrix(assign(nam, coefs_stan_stk_year[i] <- cbind(ind_coef[c(1:8),c(4:8)], paste(i))))
+}
+
+### Sigmas
+coefs_stan_stk_sig <- matrix(NA,
+                             nrow = length(stocks),
+                             ncol = 6,
+                             dimnames = list(stocks,c("lower","25","mid","75","upper","agent")))
+for(i in agents){
+  model<-get(paste("mod.",i, sep=""))
+  ind_coef <- summary(model, 
+                      regex_pars = c("sigma","Sigma"),
+                      probs = c(0.025,0.25,0.5,0.75, 0.975),
+                      digits = 2)
+  nam <- paste("coefs_stan_stk_sig", i, sep = ".")
+  as.matrix(assign(nam, coefs_stan_stk_sig[i] <- cbind(ind_coef[c(1:5),c(4:8)], paste(i))))
+}
+
+### Rhat and Neff
+sims <-as.matrix(mod.arena2) #extract parameter names from any agent model 
+dim(sims)
+para_name <- c(colnames(sims), "mean_PPD", "log-posterior")
+para_name
+
+#### Rhat
+coefs_stan_stk_rhat <- matrix(NA,
+                              nrow = length(para_name),
+                              ncol = 2,
+                              dimnames = list(para_name,c("Rhat","agent")))
+for(i in agents){
+  model<-get(paste("mod",i, sep="."))
+  ind_coef <- as.matrix(summary(model, 
+                                digits = 3) [,"Rhat"])
+  nam <- paste("coefs_stan_stk_rhat", i, sep = ".")
+  as.matrix(assign(nam, coefs_stan_stk_rhat[i] <- cbind(ind_coef[c(1:52),1], paste(i), paste("Rhat"))))
+}
+
+#### Neff
+coefs_stan_stk_neff <- matrix(NA,
+                              nrow = length(para_name),
+                              ncol = 2,
+                              dimnames = list(para_name,c("Neff","agent")))
+for(i in agents){
+  model<-get(paste("mod",i, sep="."))
+  ind_coef <- as.matrix(summary(model) [,"n_eff"])
+  nam <- paste("coefs_stan_stk_neff", i, sep = ".")
+  as.matrix(assign(nam, coefs_stan_stk_neff[i] <- cbind(ind_coef[c(1:52),1], paste(i), paste("Neff"))))
+}
+
+#### Rbind all posteriors and save as .csv file
+post_int_slpintsig <- rbind(coefs_stan_stk_int.arena2,
+                            coefs_stan_stk_int.c_b_cys,
+                            coefs_stan_stk_int.ce_sha,
+                            coefs_stan_stk_int.de_sal,
+                            coefs_stan_stk_int.fa_mar,
+                            coefs_stan_stk_int.fl_psy,
+                            coefs_stan_stk_int.ic_hof,
+                            coefs_stan_stk_int.ic_mul,
+                            coefs_stan_stk_int.ku_thy,
+                            coefs_stan_stk_int.lo_sal,
+                            coefs_stan_stk_int.my_arc,
+                            coefs_stan_stk_int.pa_kab,
+                            coefs_stan_stk_int.pa_min,
+                            coefs_stan_stk_int.pa_pse,
+                            coefs_stan_stk_int.pa_ther,
+                            coefs_stan_stk_int.prv,
+                            coefs_stan_stk_int.pspv,
+                            coefs_stan_stk_int.rlo,
+                            coefs_stan_stk_int.sch,
+                            coefs_stan_stk_int.smallUK,
+                            coefs_stan_stk_int.sp_des,
+                            coefs_stan_stk_int.te_bry,
+                            coefs_stan_stk_int.te_mar,
+                            coefs_stan_stk_int.ven,
+                            coefs_stan_stk_slp.arena2,
+                            coefs_stan_stk_slp.c_b_cys,
+                            coefs_stan_stk_slp.ce_sha,
+                            coefs_stan_stk_slp.de_sal,
+                            coefs_stan_stk_slp.fa_mar,
+                            coefs_stan_stk_slp.fl_psy,
+                            coefs_stan_stk_slp.ic_hof,
+                            coefs_stan_stk_slp.ic_mul,
+                            coefs_stan_stk_slp.ku_thy,
+                            coefs_stan_stk_slp.lo_sal,
+                            coefs_stan_stk_slp.my_arc,
+                            coefs_stan_stk_slp.pa_kab,
+                            coefs_stan_stk_slp.pa_min,
+                            coefs_stan_stk_slp.pa_pse,
+                            coefs_stan_stk_slp.pa_ther,
+                            coefs_stan_stk_slp.prv,
+                            coefs_stan_stk_slp.pspv,
+                            coefs_stan_stk_slp.rlo,
+                            coefs_stan_stk_slp.sch,
+                            coefs_stan_stk_slp.smallUK,
+                            coefs_stan_stk_slp.sp_des,
+                            coefs_stan_stk_slp.te_bry,
+                            coefs_stan_stk_slp.te_mar,
+                            coefs_stan_stk_slp.ven,
+                            coefs_stan_stk_sig.arena2,
+                            coefs_stan_stk_sig.c_b_cys,
+                            coefs_stan_stk_sig.ce_sha,
+                            coefs_stan_stk_sig.de_sal,
+                            coefs_stan_stk_sig.fa_mar,
+                            coefs_stan_stk_sig.fl_psy,
+                            coefs_stan_stk_sig.ic_hof,
+                            coefs_stan_stk_sig.ic_mul,
+                            coefs_stan_stk_sig.ku_thy,
+                            coefs_stan_stk_sig.lo_sal,
+                            coefs_stan_stk_sig.my_arc,
+                            coefs_stan_stk_sig.pa_kab,
+                            coefs_stan_stk_sig.pa_min,
+                            coefs_stan_stk_sig.pa_pse,
+                            coefs_stan_stk_sig.pa_ther,
+                            coefs_stan_stk_sig.prv,
+                            coefs_stan_stk_sig.pspv,
+                            coefs_stan_stk_sig.rlo,
+                            coefs_stan_stk_sig.sch,
+                            coefs_stan_stk_sig.smallUK,
+                            coefs_stan_stk_sig.sp_des,
+                            coefs_stan_stk_sig.te_bry,
+                            coefs_stan_stk_sig.te_mar,
+                            coefs_stan_stk_sig.ven,
+                            coefs_stan_stk_year.arena2,
+                            coefs_stan_stk_year.c_b_cys,
+                            coefs_stan_stk_year.ce_sha,
+                            coefs_stan_stk_year.de_sal,
+                            coefs_stan_stk_year.fa_mar,
+                            coefs_stan_stk_year.fl_psy,
+                            coefs_stan_stk_year.ic_hof,
+                            coefs_stan_stk_year.ic_mul,
+                            coefs_stan_stk_year.ku_thy,
+                            coefs_stan_stk_year.lo_sal,
+                            coefs_stan_stk_year.my_arc,
+                            coefs_stan_stk_year.pa_kab,
+                            coefs_stan_stk_year.pa_min,
+                            coefs_stan_stk_year.pa_pse,
+                            coefs_stan_stk_year.pa_ther,
+                            coefs_stan_stk_year.prv,
+                            coefs_stan_stk_year.pspv,
+                            coefs_stan_stk_year.rlo,
+                            coefs_stan_stk_year.sch,
+                            coefs_stan_stk_year.smallUK,
+                            coefs_stan_stk_year.sp_des,
+                            coefs_stan_stk_year.te_bry,
+                            coefs_stan_stk_year.te_mar,
+                            coefs_stan_stk_year.ven)
+
+write.csv(post_int_slpintsig, file="data/Posterior distributions_Int Slp Sig_global_indep mod_prev_SST.csv")
+
+#### Rbind all convergence parameters and save as .csv file
+post_rhatneff_prev <- rbind(coefs_stan_stk_rhat.arena2,
+                            coefs_stan_stk_rhat.c_b_cys,
+                            coefs_stan_stk_rhat.ce_sha,
+                            coefs_stan_stk_rhat.de_sal,
+                            coefs_stan_stk_rhat.fa_mar,
+                            coefs_stan_stk_rhat.fl_psy,
+                            coefs_stan_stk_rhat.ic_hof,
+                            coefs_stan_stk_rhat.ic_mul,
+                            coefs_stan_stk_rhat.ku_thy,
+                            coefs_stan_stk_rhat.lo_sal,
+                            coefs_stan_stk_rhat.my_arc,
+                            coefs_stan_stk_rhat.pa_kab,
+                            coefs_stan_stk_rhat.pa_min,
+                            coefs_stan_stk_rhat.pa_pse,
+                            coefs_stan_stk_rhat.pa_ther,
+                            coefs_stan_stk_rhat.prv,
+                            coefs_stan_stk_rhat.pspv,
+                            coefs_stan_stk_rhat.rlo,
+                            coefs_stan_stk_rhat.sch,
+                            coefs_stan_stk_rhat.smallUK,
+                            coefs_stan_stk_rhat.sp_des,
+                            coefs_stan_stk_rhat.te_bry,
+                            coefs_stan_stk_rhat.te_mar,
+                            coefs_stan_stk_rhat.ven,
+                            coefs_stan_stk_neff.arena2,
+                            coefs_stan_stk_neff.c_b_cys,
+                            coefs_stan_stk_neff.ce_sha,
+                            coefs_stan_stk_neff.de_sal,
+                            coefs_stan_stk_neff.fa_mar,
+                            coefs_stan_stk_neff.fl_psy,
+                            coefs_stan_stk_neff.ic_hof,
+                            coefs_stan_stk_neff.ic_mul,
+                            coefs_stan_stk_neff.ku_thy,
+                            coefs_stan_stk_neff.lo_sal,
+                            coefs_stan_stk_neff.my_arc,
+                            coefs_stan_stk_neff.pa_kab,
+                            coefs_stan_stk_neff.pa_min,
+                            coefs_stan_stk_neff.pa_pse,
+                            coefs_stan_stk_neff.pa_ther,
+                            coefs_stan_stk_neff.prv,
+                            coefs_stan_stk_neff.pspv,
+                            coefs_stan_stk_neff.rlo,
+                            coefs_stan_stk_neff.sch,
+                            coefs_stan_stk_neff.smallUK,
+                            coefs_stan_stk_neff.sp_des,
+                            coefs_stan_stk_neff.te_bry,
+                            coefs_stan_stk_neff.te_mar,
+                            coefs_stan_stk_neff.ven)
+
+write.csv(post_rhatneff_prev, file="data/Posterior distributions_Rhat and Neff_global_indep mod_prev_SST.csv")
+
+### Plot posteriors per agent model from files
+post_all <- read.csv("data/Posterior distributions_Int Slp Sig_global_indep mod_prev_SST.csv")
+post_all <- droplevels(post_all[!post_all$X.1 == "smallUK",]) #remove smallUK from analysis
+post_agents <- read.csv("data/prev_coefs_stan_global_indep mod_SST.csv")
+post_agents <- droplevels(post_agents[!post_agents$X == "smallUK",])
+
+## Plot Posteriors for all agents
+jpeg(filename='figs/Fig_SSHI ONNE Pathogen Productivity_Agent slopes_Prevalence_SST.jpg', 
+      width=480, height=500, quality=75)
+ggplot(post_agents) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_linerange(aes(x = reorder(X, -mid), ymax = X75, ymin = X25), size=1.5, col="darkblue") +
+  geom_linerange(aes(x = X, ymax = upper, ymin = lower), col="darkblue") +
+  geom_point(aes(x = X, y = mid), size = 3, col="darkblue")+
+  labs(x ="Infectious agents", y = "Effect size", title="Prevalence")+
+  scale_x_discrete(labels=c("ic_mul" = "I. multifiliis", 
+                            "te_mar" = "T. maritinum",
+                            "pa_ther" = "P. theridion",
+                            "fl_psy" = "F. psychrophilum",
+                            "sch" = "Ca. S. salmonis",
+                            "te_bry" = "T. bryosalmonae",
+                            "pa_kab" = "P. kabatai",
+                            "c_b_cys" = "Ca. B. cysticola",
+                            "pa_min" = "P. minibicornis",
+                            "arena2" = "Arenavirus",
+                            "fa_mar" = "F. margolisi",
+                            "my_arc" = "M. arcticus",
+                            "ven" = "VENV",
+                            "ic_hof" = "I. hoferi",
+                            "lo_sal" = "L. salmonae",
+                            "rlo" = "RLO",
+                            "sp_des" = "S. destruens",
+                            "ku_thy" = "K. thyrsites",
+                            "prv" = "PRV",
+                            "pspv" = "PSPV",
+                            "ce_sha" = "C. shasta",
+                            "pa_pse" = "P. pseudobranchicola",
+                            "de_sal" = "D. salmonis"))+
+  theme(axis.text.y = element_text(face = "italic"), plot.title = element_text(hjust = 0.5))+
+  coord_flip()
+dev.off()
+
+## Plots per agent
+#### Extract output from agent model
+post_ic_mul <- post_all[post_all$X.1=="ic_mul",]
+
+## Extract Posterior slopes by Stock - ic_mul
+post_ic_mul_stockslp <- post_ic_mul[grep("prev_std Stock", post_ic_mul$X) ,]
+
+#### Plot
+jpeg(filename='figs/Fig_SSHI ONNE Pathogen Productivity_ic_mul prev by stock.jpg', 
+     width=480, height=500, quality=75)
+ggplot(post_ic_mul_stockslp) +
+  geom_hline(yintercept = 0, linetype = "dashed", col="blue")+
+  geom_linerange(aes(x = reorder(X, -X50.), ymax = X75., ymin = X25.), size=1.5, col="black") +
+  geom_linerange(aes(x = X, ymax = X97.5., ymin = X2.5.), col="black") +
+  geom_point(aes(x = X, y = X50.), size = 3) +
+  ylim(-0.8,0.8)+
+  coord_flip()
+dev.off()
+
+## Extract Posterior intercepts for Stocks - ic_mul example
+post_ic_mul_stockint <- post_ic_mul[c(1:18) ,]
+## Plot
+ggplot(post_ic_mul_stockint) +
+  geom_hline(yintercept = 0, linetype = "dashed")+
+  geom_linerange(aes(x = reorder(X, -X50.), ymax = X75., ymin = X25.), size=1.5, col="gray") +
+  geom_linerange(aes(x = X, ymax = X97.5., ymin = X2.5.), col="gray") +
+  geom_point(aes(x = X, y = X50.), size = 2) +
+  coord_flip()
+
+## Extract sigma values
+post_ic_mul_stocksig <- post_ic_mul[grep("igma", post_ic_mul$X) ,]
+## Plot
+ggplot(post_ic_mul_stocksig) +
+  geom_hline(yintercept = 0, linetype = "dashed")+
+  geom_linerange(aes(x = X, ymax = X75., ymin = X25.), size=1.5, col="gray") +
+  geom_linerange(aes(x = X, ymax = X97.5., ymin = X2.5.), col="gray") +
+  geom_point(aes(x = X, y = X50.), size = 2) +
+  coord_flip()
+
+## Extract Posterior intercepts for years
+post_ic_mul_year <- post_ic_mul[grep("b\\[\\(\\Intercept) Year", post_ic_mul$X) ,]
+## Plot
+ggplot(post_ic_mul_year) +
+  geom_hline(yintercept = 0, linetype = "dashed")+
+  geom_linerange(aes(x = reorder(X, -X50.), ymax = X75., ymin = X25.), size=1.5, col="gray") +
+  geom_linerange(aes(x = X, ymax = X97.5., ymin = X2.5.), col="gray") +
+  geom_point(aes(x = X, y = X50.), size = 2) +
+  coord_flip()
+
+
+## Calculate stock-specific Posterior estimates by adding 
+## stock-specific draws to "global" (averaged across stocks) and then averaging
+
+## Create a matrix and loop
+stk.spec.slope <- matrix(NA,
+                         nrow = 19,
+                         ncol = 6,
+                         dimnames = list(para_name2,c("2.5","25","50","75","97.5","agent")))
+
+for(i in agents){
+  model<-get(paste("mod",i, sep="."))
+  temp2 <- data.frame(model)
+  temp3 <- temp2[,grepl("prev",names(temp2))] #include only columns with "prev" in name
+  temp4 <- temp3[,-grep("igma",colnames(temp3))] #remove columns with "igma" in name
+  temp5 <- temp4[2001:4000,] #remove warm up iterations
+  temp6 <- data.frame(temp5[,1] + temp5[,2:19]) #add the stock-specific draws to global column
+  temp7 <- cbind(temp5[,1],temp6) #bind with global column
+  para_name2 <- colnames(temp5) #create an object with column names
+  colnames(temp7) <- colnames(temp5) #assign names to columns
+  nam <- paste("stk.spec.slope", i, sep = ".")
+  temp8 <- as.matrix(apply(temp7, 2, quantile, probs = c(0.025,0.25,0.50,0.75,0.975)))
+  temp9 <- t(temp8)
+  temp10<- as.matrix(cbind(temp9, paste(i)))
+  colnames(temp10) <- c("2.5","25","50","75","97.5","agent") #assign names to columns
+  as.matrix(assign(nam, stk.spec.slope[i] <- temp10))
+}
+
+#### Rbind all posteriors and save as .csv file
+stk.spec.slope.all <- rbind(stk.spec.slope.arena2,
+                            stk.spec.slope.c_b_cys,
+                            stk.spec.slope.ce_sha,
+                            stk.spec.slope.de_sal,
+                            stk.spec.slope.fa_mar,
+                            stk.spec.slope.fl_psy,
+                            stk.spec.slope.ic_hof,
+                            stk.spec.slope.ic_mul,
+                            stk.spec.slope.ku_thy,
+                            stk.spec.slope.lo_sal,
+                            stk.spec.slope.my_arc,
+                            stk.spec.slope.pa_kab,
+                            stk.spec.slope.pa_min,
+                            stk.spec.slope.pa_pse,
+                            stk.spec.slope.pa_ther,
+                            stk.spec.slope.prv,
+                            stk.spec.slope.pspv,
+                            stk.spec.slope.rlo,
+                            stk.spec.slope.sch,
+                            stk.spec.slope.sp_des,
+                            stk.spec.slope.te_bry,
+                            stk.spec.slope.te_mar,
+                            stk.spec.slope.ven)
+write.csv(stk.spec.slope.all, file="data/Stock specific slopes_prev.csv")
+
+##### READ IN DATA FROM FILE
+stspslp <- read.csv("data/Stock specific slopes_prev.csv")
+stspslp$stock <- substr(stspslp$X, 18, 28)
+stspslp$stock <- substr(stspslp$stock, 1, nchar(stspslp$stock)-1)
+stspslp$stock <- sub("^$", "Global", stspslp$stock)
+
+## Extract stock-specific slopes - ic_mul model
+stk.spec.ic_mul <-stspslp[stspslp$agent=="ic_mul",]
+## Plot
+jpeg(filename='figs/Fig_SSHI ONNE_stock sp slope_ic_mul.jpg', 
+     width=480, height=500, quality=75)
+ggplot(stk.spec.ic_mul) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_linerange(aes(x = reorder(stock, -X50), ymax = X75, ymin = X25), size=1.5, col="gray") +
+  geom_linerange(aes(x = stock, ymax = X97.5, ymin = X2.5), col="gray") +
+  geom_linerange(data=stk.spec.ic_mul[stk.spec.ic_mul$stock=="Global",], 
+                 aes(x = stock, ymax = X75, ymin = X25), size=2, col="black") +
+  geom_linerange(data=stk.spec.ic_mul[stk.spec.ic_mul$stock=="Global",], 
+                 aes(x = stock, ymax = X2.5, ymin = X97.5), col="black") +
+  geom_point(aes(x = stock, y = X50), size = 2) +
+  geom_point(data=stk.spec.ic_mul[stk.spec.ic_mul$stock=="Global",], aes(x = stock, y = X50), size = 3) +
+  labs(x="Stock", y="Effect size") +
+  coord_flip()
+dev.off()
+
+## Plot stock-specific slopes - te_mar
+stk.spec.te_mar <-stspslp[stspslp$agent=="te_mar",]
+## Plot
+jpeg(filename='figs/Fig_SSHI ONNE_stock sp slope_te_mar.jpg', 
+     width=480, height=500, quality=75)
+ggplot(stk.spec.te_mar) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_linerange(aes(x = reorder(stock, -X50), ymax = X75, ymin = X25), size=1.5, col="gray") +
+  geom_linerange(aes(x = stock, ymax = X97.5, ymin = X2.5), col="gray") +
+  geom_linerange(data=stk.spec.te_mar[stk.spec.te_mar$stock=="Global",], 
+                 aes(x = stock, ymax = X75, ymin = X25), size=2, col="black") +
+  geom_linerange(data=stk.spec.te_mar[stk.spec.te_mar$stock=="Global",], 
+                 aes(x = stock, ymax = X2.5, ymin = X97.5), col="black") +
+  geom_point(aes(x = stock, y = X50), size = 2) +
+  geom_point(data=stk.spec.te_mar[stk.spec.te_mar$stock=="Global",], aes(x = stock, y = X50), size = 3) +
+  labs(x="Stock", y="Effect size") +
+  coord_flip()
+dev.off()
+
+## Plot stock-specific slopes - pa_ther
+stk.spec.pa_ther <-stspslp[stspslp$agent=="pa_ther",]
+## Plot
+jpeg(filename='figs/Fig_SSHI ONNE_stock sp slope_pa_ther.jpg', 
+     width=480, height=500, quality=75)
+ggplot(stk.spec.pa_ther) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_linerange(aes(x = reorder(stock, -X50), ymax = X75, ymin = X25), size=1.5, col="gray") +
+  geom_linerange(aes(x = stock, ymax = X97.5, ymin = X2.5), col="gray") +
+  geom_linerange(data=stk.spec.pa_ther[stk.spec.pa_ther$stock=="Global",], 
+                 aes(x = stock, ymax = X75, ymin = X25), size=2, col="black") +
+  geom_linerange(data=stk.spec.pa_ther[stk.spec.pa_ther$stock=="Global",], 
+                 aes(x = stock, ymax = X2.5, ymin = X97.5), col="black") +
+  geom_point(aes(x = stock, y = X50), size = 2) +
+  geom_point(data=stk.spec.pa_ther[stk.spec.pa_ther$stock=="Global",], aes(x = stock, y = X50), size = 3) +
+  labs(x="Stock", y="Effect size") +
+  coord_flip()
+dev.off()
+
+## Derive proportions of posterior draws <0 per model - prevalence
+param<-colnames(data.frame(mod.arena2)) #create object of parameters in model
+param.prop0 <- matrix(NA,
+                      ncol = length(param),
+                      nrow = length(agents),
+                      dimnames = list(agents,param))
+
+for (i in agents){
+  model<-as.matrix(get(paste("mod.",i, sep="")))
+  model2<-model[2001:4000,]
+  param.prop0[i,] <- (colSums(model2 < 0))/2000
+}
+write.csv(param.prop0, file="data/Percent of posterior draws less than 0_prev.csv")
+
+
+
+
+
+
+
+
+
+
+
+
+#################################################################################
+#################################################################################
+# LOAD - INDEPENDENT MODELS by AGENT
+
+## Global SW metric - Independent models
+
+### Loop for STAN independent models
+for(i in agents){
+  data <- subset(inf_agt_resid_data_gl, agent==i)
+  nam <- paste("mod.load", i, sep = ".")
+  assign(nam, stan_lmer(resid_value ~ sst_anom + load_std + (load_std|Stock) +(1|Year), 
+                        data = data,
+                        adapt_delta=0.99,
+                        REML = F))
+}
+
+## Loop to derive coefficient estimates
+coefs_stan_l.sst <- matrix(NA,
+                     nrow = length(agents),
+                     ncol = 5,
+                     dimnames = list(agents,c("lower","25","mid","75","upper")))
+for(i in agents){
+  model<-get(paste("mod.load",i, sep="."))
+  ind_coef <- summary(model, 
+                      pars = c("load_std"),
+                      probs = c(0.025,0.25,0.5,0.75, 0.975),
+                      digits = 2)
+  coefs_stan_l.sst[i,] <- ind_coef[1,c(4:8)]
+}
+write.csv(coefs_stan_l, file="data/load_coefs_stan_global_indep mod_SST.csv")
+
+## Derive coefficient estimates for SST and save in .csv file
+coefs_stan_l.sst <- matrix(NA,
+                         nrow = length(agents),
+                         ncol = 5,
+                         dimnames = list(agents,c("lower","25","mid","75","upper")))
+for(i in agents){
+  model<-get(paste("mod.load",i, sep="."))
+  ind_coef <- summary(model, 
+                      pars = c("sst_anom"),
+                      probs = c(0.025,0.25,0.5,0.75, 0.975),
+                      digits = 2)
+  coefs_stan_l.sst[i,] <- ind_coef[1,c(4:8)]
+}
+write.csv(coefs_stan_l.sst, file="data/load_coefs_stan_global_indep mod_SST_sstbeta.csv")
+
+
+# Load estimates from file and add rownames
+coefs_stan <- read.csv("data/load_coefs_stan_global_indep mod_SST.csv")
+coefs_stan <- coefs_stan[coefs_stan$X!="smallUK",]
+rownames(coefs_stan) <- coefs_stan[,1]
+coefs_stan <- coefs_stan[,-1] 
+
+# Plot effect size of agents
+coefs_order <- coefs_stan[order(-coefs_stan[,3]),]
+
+jpeg(filename='figs/Fig_SSHI ONNE Pathogen Productivity_Load_SST_agentbeta.jpg', 
+     width=480, height=500, quality=75)
+par(mfrow=c(1,1), mar=c(3,1,1,1),oma=c(0.5,0.5,0.5,0.5))
+plotCI(x = coefs_order[,3],
+       y = seq(1,length(agents)),
+       li = (coefs_order[,1]),
+       ui = (coefs_order[,5]),
+       err = "x",
+       sfrac = 0 ,
+       gap = 0,
+       yaxt = "n",
+       xaxt = "n",
+       ylab = "",
+       xlab = "",
+       xlim = c(-3,1),
+       pch = 16,
+       scol = "grey")
+plotCI(x = coefs_order[,3],
+       y = seq(1,length(agents)),
+       li = (coefs_order[,2]),
+       ui = (coefs_order[,4]),
+       err = "x",
+       sfrac = 0 ,
+       gap = 0,
+       pch = 16,
+       add = TRUE,
+       lwd = 3,
+       scol = "grey")
+text(rep(-2.5,length(agents)), 
+     seq(1,length(agents)), 
+     labels = rownames(coefs_order), 
+     pos = 4,
+     font = 2,
+     cex=0.95)
+axis(1, at = c(-2.5, -2, -1.5, -1, -0.5, 0, 0.5, 1))
+abline(v = 0, lty = 2)
+box(col="grey")	
+mtext("Effect size",1,line=2.2, cex=1.1)
+mtext("Intensity",3,line=0.25)
+dev.off()
+
+# Plot effect size of sst by agent
+coefs_order <- coefs_stan_l.sst[order(-coefs_stan_l.sst[,3]),]
+
+jpeg(filename='figs/Fig_SSHI ONNE Pathogen Productivity_Load_SST_sstbeta.jpg', 
+     width=480, height=500, quality=75)
+par(mfrow=c(1,1), mar=c(3,1,1,1),oma=c(0.5,0.5,0.5,0.5))
+plotCI(x = coefs_order[,3],
+       y = seq(1,length(agents)),
+       li = (coefs_order[,1]),
+       ui = (coefs_order[,5]),
+       err = "x",
+       sfrac = 0 ,
+       gap = 0,
+       yaxt = "n",
+       xaxt = "n",
+       ylab = "",
+       xlab = "",
+       xlim = c(-3,1),
+       pch = 16,
+       scol = "grey")
+plotCI(x = coefs_order[,3],
+       y = seq(1,length(agents)),
+       li = (coefs_order[,2]),
+       ui = (coefs_order[,4]),
+       err = "x",
+       sfrac = 0 ,
+       gap = 0,
+       pch = 16,
+       add = TRUE,
+       lwd = 3,
+       scol = "grey")
+text(rep(-3,length(agents)), 
+     seq(1,length(agents)), 
+     labels = rownames(coefs_order), 
+     pos = 4,
+     font = 2,
+     cex=0.95)
+axis(1, at = c(-2,-1.5,-1, -0.5, 0, 0.5, 1))
+abline(v = 0, lty = 2)
+box(col="grey")	
+mtext("Effect size",1,line=2.2, cex=1.1)
+mtext("SST",3,line=0.25)
+dev.off()
+
+## Loop to derive posteriors by stock
+### Intercepts
+coefs_stan_stk_int_load <- matrix(NA,
+                                  nrow = length(stocks),
+                                  ncol = 6,
+                                  dimnames = list(stocks,c("lower","25","mid","75","upper","agent")))
+for(i in agents){
+  model<-get(paste("mod.load",i, sep="."))
+  ind_coef <- summary(model, 
+                      regex_pars = c("b\\[\\(\\Intercept) Stock\\:"),
+                      probs = c(0.025,0.25,0.5,0.75, 0.975),
+                      digits = 2)
+  nam <- paste("coefs_stan_stk_int_load", i, sep = ".")
+  as.matrix(assign(nam, coefs_stan_stk_int_load[i] <- cbind(ind_coef[c(1:18),c(4:8)], paste(i))))
+}
+
+### Slopes
+coefs_stan_stk_slp_load <- matrix(NA,
+                                  nrow = length(stocks),
+                                  ncol = 6,
+                                  dimnames = list(stocks,c("lower","25","mid","75","upper","agent")))
+for(i in agents){
+  model<-get(paste("mod.load",i, sep="."))
+  ind_coef <- summary(model, 
+                      regex_pars = c("b\\[\\load_std Stock\\:"),
+                      probs = c(0.025,0.25,0.5,0.75, 0.975),
+                      digits = 2)
+  nam <- paste("coefs_stan_stk_slp_load", i, sep = ".")
+  as.matrix(assign(nam, coefs_stan_stk_slp_load[i] <- cbind(ind_coef[c(1:18),c(4:8)], paste(i))))
+}
+
+### Year intercepts
+years<-unique(inf_agt_resid_data_gl$Year)
+coefs_stan_stk_year_load <- matrix(NA,
+                                   nrow = length(years),
+                                   ncol = 6,
+                                   dimnames = list(years,c("lower","25","mid","75","upper","agent")))
+for(i in agents){
+  model<-get(paste("mod.",i, sep=""))
+  ind_coef <- summary(model, 
+                      regex_pars = "b\\[\\(\\Intercept) Year",
+                      probs = c(0.025,0.25,0.5,0.75, 0.975),
+                      digits = 2)
+  nam <- paste("coefs_stan_stk_year_load", i, sep = ".")
+  as.matrix(assign(nam, coefs_stan_stk_year_load[i] <- cbind(ind_coef[c(1:8),c(4:8)], paste(i))))
+}
+
+### Sigmas
+coefs_stan_stk_sig_load <- matrix(NA,
+                                  nrow = length(stocks),
+                                  ncol = 6,
+                                  dimnames = list(stocks,c("lower","25","mid","75","upper","agent")))
+for(i in agents){
+  model<-get(paste("mod.load",i, sep="."))
+  ind_coef <- summary(model, 
+                      regex_pars = c("sigma","Sigma"),
+                      probs = c(0.025,0.25,0.5,0.75, 0.975),
+                      digits = 2)
+  nam <- paste("coefs_stan_stk_sig_load", i, sep = ".")
+  as.matrix(assign(nam, coefs_stan_stk_sig_load[i] <- cbind(ind_coef[c(1:5),c(4:8)], paste(i))))
+}
+
+### Rhat and Neff
+#extract parameter names
+sims<-as.matrix(mod.load.arena2) #use any model to get parameter names, they should be the same
+dim(sims)
+para_name <- c(colnames(sims), "mean_PPD", "log-posterior")
+para_name
+
+coefs_stan_stk_rhat_load <- matrix(NA,
+                                   nrow = length(para_name),
+                                   ncol = 2,
+                                   dimnames = list(para_name,c("Rhat","agent")))
+for(i in agents){
+  model<-get(paste("mod.load",i, sep="."))
+  ind_coef <- as.matrix(summary(model, 
+                                digits = 3) [,"Rhat"])
+  nam <- paste("coefs_stan_stk_rhat_load", i, sep = ".")
+  as.matrix(assign(nam, coefs_stan_stk_rhat_load[i] <- cbind(ind_coef[c(1:52),1], paste(i), paste("Rhat"))))
+}
+
+coefs_stan_stk_neff_load <- matrix(NA,
+                                   nrow = length(para_name),
+                                   ncol = 2,
+                                   dimnames = list(para_name,c("Neff","agent")))
+for(i in agents){
+  model<-get(paste("mod.load",i, sep="."))
+  ind_coef <- as.matrix(summary(model) [,"n_eff"])
+  nam <- paste("coefs_stan_stk_neff_load", i, sep = ".")
+  as.matrix(assign(nam, coefs_stan_stk_neff_load[i] <- cbind(ind_coef[c(1:52),1], paste(i), paste("Neff"))))
+}
+
+post_int_slpintsig_load <- rbind(coefs_stan_stk_int_load.arena2,
+                                 coefs_stan_stk_int_load.c_b_cys,
+                                 coefs_stan_stk_int_load.ce_sha,
+                                 coefs_stan_stk_int_load.de_sal,
+                                 coefs_stan_stk_int_load.fa_mar,
+                                 coefs_stan_stk_int_load.fl_psy,
+                                 coefs_stan_stk_int_load.ic_hof,
+                                 coefs_stan_stk_int_load.ic_mul,
+                                 coefs_stan_stk_int_load.ku_thy,
+                                 coefs_stan_stk_int_load.lo_sal,
+                                 coefs_stan_stk_int_load.my_arc,
+                                 coefs_stan_stk_int_load.pa_kab,
+                                 coefs_stan_stk_int_load.pa_min,
+                                 coefs_stan_stk_int_load.pa_pse,
+                                 coefs_stan_stk_int_load.pa_ther,
+                                 coefs_stan_stk_int_load.prv,
+                                 coefs_stan_stk_int_load.pspv,
+                                 coefs_stan_stk_int_load.rlo,
+                                 coefs_stan_stk_int_load.sch,
+                                 coefs_stan_stk_int_load.smallUK,
+                                 coefs_stan_stk_int_load.sp_des,
+                                 coefs_stan_stk_int_load.te_bry,
+                                 coefs_stan_stk_int_load.te_mar,
+                                 coefs_stan_stk_int_load.ven,
+                                 coefs_stan_stk_slp_load.arena2,
+                                 coefs_stan_stk_slp_load.c_b_cys,
+                                 coefs_stan_stk_slp_load.ce_sha,
+                                 coefs_stan_stk_slp_load.de_sal,
+                                 coefs_stan_stk_slp_load.fa_mar,
+                                 coefs_stan_stk_slp_load.fl_psy,
+                                 coefs_stan_stk_slp_load.ic_hof,
+                                 coefs_stan_stk_slp_load.ic_mul,
+                                 coefs_stan_stk_slp_load.ku_thy,
+                                 coefs_stan_stk_slp_load.lo_sal,
+                                 coefs_stan_stk_slp_load.my_arc,
+                                 coefs_stan_stk_slp_load.pa_kab,
+                                 coefs_stan_stk_slp_load.pa_min,
+                                 coefs_stan_stk_slp_load.pa_pse,
+                                 coefs_stan_stk_slp_load.pa_ther,
+                                 coefs_stan_stk_slp_load.prv,
+                                 coefs_stan_stk_slp_load.pspv,
+                                 coefs_stan_stk_slp_load.rlo,
+                                 coefs_stan_stk_slp_load.sch,
+                                 coefs_stan_stk_slp_load.smallUK,
+                                 coefs_stan_stk_slp_load.sp_des,
+                                 coefs_stan_stk_slp_load.te_bry,
+                                 coefs_stan_stk_slp_load.te_mar,
+                                 coefs_stan_stk_slp_load.ven,
+                                 coefs_stan_stk_sig_load.arena2,
+                                 coefs_stan_stk_sig_load.c_b_cys,
+                                 coefs_stan_stk_sig_load.ce_sha,
+                                 coefs_stan_stk_sig_load.de_sal,
+                                 coefs_stan_stk_sig_load.fa_mar,
+                                 coefs_stan_stk_sig_load.fl_psy,
+                                 coefs_stan_stk_sig_load.ic_hof,
+                                 coefs_stan_stk_sig_load.ic_mul,
+                                 coefs_stan_stk_sig_load.ku_thy,
+                                 coefs_stan_stk_sig_load.lo_sal,
+                                 coefs_stan_stk_sig_load.my_arc,
+                                 coefs_stan_stk_sig_load.pa_kab,
+                                 coefs_stan_stk_sig_load.pa_min,
+                                 coefs_stan_stk_sig_load.pa_pse,
+                                 coefs_stan_stk_sig_load.pa_ther,
+                                 coefs_stan_stk_sig_load.prv,
+                                 coefs_stan_stk_sig_load.pspv,
+                                 coefs_stan_stk_sig_load.rlo,
+                                 coefs_stan_stk_sig_load.sch,
+                                 coefs_stan_stk_sig_load.smallUK,
+                                 coefs_stan_stk_sig_load.sp_des,
+                                 coefs_stan_stk_sig_load.te_bry,
+                                 coefs_stan_stk_sig_load.te_mar,
+                                 coefs_stan_stk_sig_load.ven,
+                                 coefs_stan_stk_year_load.arena2,
+                                 coefs_stan_stk_year_load.c_b_cys,
+                                 coefs_stan_stk_year_load.ce_sha,
+                                 coefs_stan_stk_year_load.de_sal,
+                                 coefs_stan_stk_year_load.fa_mar,
+                                 coefs_stan_stk_year_load.fl_psy,
+                                 coefs_stan_stk_year_load.ic_hof,
+                                 coefs_stan_stk_year_load.ic_mul,
+                                 coefs_stan_stk_year_load.ku_thy,
+                                 coefs_stan_stk_year_load.lo_sal,
+                                 coefs_stan_stk_year_load.my_arc,
+                                 coefs_stan_stk_year_load.pa_kab,
+                                 coefs_stan_stk_year_load.pa_min,
+                                 coefs_stan_stk_year_load.pa_pse,
+                                 coefs_stan_stk_year_load.pa_ther,
+                                 coefs_stan_stk_year_load.prv,
+                                 coefs_stan_stk_year_load.pspv,
+                                 coefs_stan_stk_year_load.rlo,
+                                 coefs_stan_stk_year_load.sch,
+                                 coefs_stan_stk_year_load.sp_des,
+                                 coefs_stan_stk_year_load.te_bry,
+                                 coefs_stan_stk_year_load.te_mar,
+                                 coefs_stan_stk_year_load.ven)
+write.csv(post_int_slpintsig_load, file="data/Posterior distributions_Int Slp Sig_global_indep mod_load_SST.csv")
+
+#### Rbind all convergence parameters and write as csv
+post_rhatneff_load <- rbind(coefs_stan_stk_rhat_load.arena2,
+                            coefs_stan_stk_rhat_load.c_b_cys,
+                            coefs_stan_stk_rhat_load.ce_sha,
+                            coefs_stan_stk_rhat_load.de_sal,
+                            coefs_stan_stk_rhat_load.fa_mar,
+                            coefs_stan_stk_rhat_load.fl_psy,
+                            coefs_stan_stk_rhat_load.ic_hof,
+                            coefs_stan_stk_rhat_load.ic_mul,
+                            coefs_stan_stk_rhat_load.ku_thy,
+                            coefs_stan_stk_rhat_load.lo_sal,
+                            coefs_stan_stk_rhat_load.my_arc,
+                            coefs_stan_stk_rhat_load.pa_kab,
+                            coefs_stan_stk_rhat_load.pa_min,
+                            coefs_stan_stk_rhat_load.pa_pse,
+                            coefs_stan_stk_rhat_load.pa_ther,
+                            coefs_stan_stk_rhat_load.prv,
+                            coefs_stan_stk_rhat_load.pspv,
+                            coefs_stan_stk_rhat_load.rlo,
+                            coefs_stan_stk_rhat_load.sch,
+                            coefs_stan_stk_rhat_load.smallUK,
+                            coefs_stan_stk_rhat_load.sp_des,
+                            coefs_stan_stk_rhat_load.te_bry,
+                            coefs_stan_stk_rhat_load.te_mar,
+                            coefs_stan_stk_rhat_load.ven,
+                            coefs_stan_stk_neff_load.arena2,
+                            coefs_stan_stk_neff_load.c_b_cys,
+                            coefs_stan_stk_neff_load.ce_sha,
+                            coefs_stan_stk_neff_load.de_sal,
+                            coefs_stan_stk_neff_load.fa_mar,
+                            coefs_stan_stk_neff_load.fl_psy,
+                            coefs_stan_stk_neff_load.ic_hof,
+                            coefs_stan_stk_neff_load.ic_mul,
+                            coefs_stan_stk_neff_load.ku_thy,
+                            coefs_stan_stk_neff_load.lo_sal,
+                            coefs_stan_stk_neff_load.my_arc,
+                            coefs_stan_stk_neff_load.pa_kab,
+                            coefs_stan_stk_neff_load.pa_min,
+                            coefs_stan_stk_neff_load.pa_pse,
+                            coefs_stan_stk_neff_load.pa_ther,
+                            coefs_stan_stk_neff_load.prv,
+                            coefs_stan_stk_neff_load.pspv,
+                            coefs_stan_stk_neff_load.rlo,
+                            coefs_stan_stk_neff_load.sch,
+                            coefs_stan_stk_neff_load.sp_des,
+                            coefs_stan_stk_neff_load.te_bry,
+                            coefs_stan_stk_neff_load.te_mar,
+                            coefs_stan_stk_neff_load.ven)
+write.csv(post_rhatneff_load, file="data/Posterior distributions_Rhat and Neff_global_indep mod_load_SST.csv")
+
+#Plot posteriors
+## Plot from file
+post_all_load <- read.csv("data/Posterior distributions_Int Slp Sig_global_indep mod_load_SST.csv")
+post_all_load <- droplevels(post_all_load[!post_all_load$X.1 == "smallUK",])
+post_agents_load <- read.csv("data/load_coefs_stan_global_indep mod_SST.csv")
+post_agents_load <- droplevels(post_agents_load[!post_agents_load$X == "smallUK",])
+
+## Plot Posterior for all agents
+jpeg(filename='figs/Fig_SSHI ONNE Pathogen Productivity_Agent slopes_Load_SST.jpg', 
+     width=480, height=500, quality=75)
+ggplot(post_agents_load) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_linerange(aes(x = reorder(X, -mid), ymax = X75, ymin = X25), size=1.5, col="darkblue") +
+  geom_linerange(aes(x = X, ymax = upper, ymin = lower), col="darkblue") +
+  geom_point(aes(x = X, y = mid), size = 3, col="darkblue")+
+  labs(x ="Infectious agents", y = "Global effect size", title="Intensity")+
+  scale_x_discrete(labels=c("ic_mul" = "I. multifiliis", 
+                            "te_mar" = "T. maritinum",
+                            "pa_ther" = "P. theridion",
+                            "fl_psy" = "F. psychrophilum",
+                            "sch" = "Ca. S. salmonis",
+                            "te_bry" = "T. bryosalmonae",
+                            "pa_kab" = "P. kabatai",
+                            "c_b_cys" = "Ca. B. cysticola",
+                            "pa_min" = "P. minibicornis",
+                            "arena2" = "Arenavirus",
+                            "fa_mar" = "F. margolisi",
+                            "my_arc" = "M. arcticus",
+                            "ven" = "VENV",
+                            "ic_hof" = "I. hoferi",
+                            "lo_sal" = "L. salmonae",
+                            "rlo" = "RLO",
+                            "sp_des" = "S. destruens",
+                            "ku_thy" = "K. thyrsites",
+                            "prv" = "PRV",
+                            "pspv" = "PSPV",
+                            "ce_sha" = "C. shasta",
+                            "pa_pse" = "P. pseudobranchicola",
+                            "de_sal" = "D. salmonis"))+
+  theme(axis.text.y = element_text(face = "italic"), plot.title = element_text(hjust = 0.5))+
+  coord_flip()
+dev.off()
+
+# Plots for te_mar
+post_te_mar_load <- post_all_load[post_all_load$X.1=="te_mar",]
+
+## Plot Posterior slopes for Stocks
+post_te_mar_load_stockslp <- post_te_mar_load[grep("load_std Stock", post_te_mar_load$X) ,]
+ggplot(post_te_mar_load_stockslp) +
+  geom_hline(yintercept = 0, linetype = "dashed", col="blue")+
+  geom_linerange(aes(x = reorder(X, -X50.), ymax = X75., ymin = X25.), size=1.5, col="black") +
+  geom_linerange(aes(x = X, ymax = X97.5., ymin = X2.5.), col="black") +
+  geom_point(aes(x = X, y = X50.), size = 3) +
+  ylim(-0.8,0.8)+
+  coord_flip()
+## Plot Posterior intercepts for Stocks
+post_te_mar_load_stockint <- post_te_mar_load[c(1:18) ,]
+ggplot(post_te_mar_load_stockint) +
+  geom_hline(yintercept = 0, linetype = "dashed")+
+  geom_linerange(aes(x = reorder(X, -X50.), ymax = X75., ymin = X25.), size=1.5, col="gray") +
+  geom_linerange(aes(x = X, ymax = X97.5., ymin = X2.5.), col="gray") +
+  geom_point(aes(x = X, y = X50.), size = 2) +
+  coord_flip()
+## Plot sigma values
+post_te_mar_load_stocksig <- post_te_mar_load[grep("igma", post_te_mar_load$X) ,]
+ggplot(post_te_mar_load_stocksig) +
+  geom_hline(yintercept = 0, linetype = "dashed")+
+  geom_linerange(aes(x = X, ymax = X75., ymin = X25.), size=1.5, col="gray") +
+  geom_linerange(aes(x = X, ymax = X97.5., ymin = X2.5.), col="gray") +
+  geom_point(aes(x = X, y = X50.), size = 2) +
+  coord_flip()
+## Plot Posterior intercepts for year
+post_te_mar_load_year <- post_te_mar_load[grep("b\\[\\(\\Intercept) Year", post_te_mar_load$X) ,]
+ggplot(post_te_mar_load_year) +
+  geom_hline(yintercept = 0, linetype = "dashed")+
+  geom_linerange(aes(x = reorder(X, -X50.), ymax = X75., ymin = X25.), size=1.5, col="gray") +
+  geom_linerange(aes(x = X, ymax = X97.5., ymin = X2.5.), col="gray") +
+  geom_point(aes(x = X, y = X50.), size = 2) +
+  coord_flip()
+
+
+
+#################################################################################
+## Derive proportions of posterior draws <0 per model - load
+param.load<-colnames(data.frame(mod.load.arena2)) #create object of parameters in model
+
+param.prop0.load <- matrix(NA,
+                           ncol = length(param.load),
+                           nrow = length(agents),
+                           dimnames = list(agents,param.load))
+
+for (i in agents){
+  model<-as.matrix(get(paste("mod.load.",i, sep="")))
+  model2<-model[2001:4000,]
+  param.prop0.load[i,] <- (colSums(model2 < 0))/2000
+}
+write.csv(param.prop0.load, file="data/Percent of posterior draws less than 0_load.csv")
+
+#################################################################################
+#################################################################################
+## Calculate stock-specific agent estimates - LOAD
+
+## Create a matrix and loop
+stk.spec.slope.load <- matrix(NA,
+                              nrow = 19,
+                              ncol = 6,
+                              dimnames = list(para_name2,c("2.5","25","50","75","97.5","agent")))
+
+for(i in agents){
+  model<-get(paste("mod.load",i, sep="."))
+  temp2 <- data.frame(model)
+  temp3 <- temp2[,grepl("load",names(temp2))] #include only columns with "load" in name
+  temp4 <- temp3[,-grep("igma",colnames(temp3))] #remove columns with "igma" in name
+  temp5 <- temp4[2001:4000,] #remove warm up iterations
+  temp6 <- data.frame(temp5[,1] + temp5[,2:19]) #add the stock-specific draws to global column
+  temp7 <- cbind(temp5[,1],temp6) #bind with global column
+  para_name2 <- colnames(temp5) #create an object with column names
+  colnames(temp7) <- colnames(temp5) #assign names to columns
+  nam <- paste("stk.spec.slope.load", i, sep = ".")
+  temp8 <- as.matrix(apply(temp7, 2, quantile, probs = c(0.025,0.25,0.50,0.75,0.975)))
+  temp9 <- t(temp8)
+  temp10<- as.matrix(cbind(temp9, paste(i)))
+  colnames(temp10) <- c("2.5","25","50","75","97.5","agent") #assign names to columns
+  as.matrix(assign(nam, stk.spec.slope.load[i] <- temp10))
+}
+
+#### Rbind all posteriors and write as csv
+stk.spec.slope.all.load <- rbind(stk.spec.slope.load.arena2,
+                                 stk.spec.slope.load.c_b_cys,
+                                 stk.spec.slope.load.ce_sha,
+                                 stk.spec.slope.load.de_sal,
+                                 stk.spec.slope.load.fa_mar,
+                                 stk.spec.slope.load.fl_psy,
+                                 stk.spec.slope.load.ic_hof,
+                                 stk.spec.slope.load.ic_mul,
+                                 stk.spec.slope.load.ku_thy,
+                                 stk.spec.slope.load.lo_sal,
+                                 stk.spec.slope.load.my_arc,
+                                 stk.spec.slope.load.pa_kab,
+                                 stk.spec.slope.load.pa_min,
+                                 stk.spec.slope.load.pa_pse,
+                                 stk.spec.slope.load.pa_ther,
+                                 stk.spec.slope.load.prv,
+                                 stk.spec.slope.load.pspv,
+                                 stk.spec.slope.load.rlo,
+                                 stk.spec.slope.load.sch,
+                                 stk.spec.slope.load.sp_des,
+                                 stk.spec.slope.load.te_bry,
+                                 stk.spec.slope.load.te_mar,
+                                 stk.spec.slope.load.ven)
+
+write.csv(stk.spec.slope.all.load, file="data/Stock specific slopes_load.csv")
+
+
+##### READ IN DATA FROM FILE
+stspslp.load<-read.csv("data/Stock specific slopes_load.csv")
+stspslp.load$stock <- substr(stspslp.load$X, 18, 28)
+stspslp.load$stock <- substr(stspslp.load$stock, 1, nchar(stspslp.load$stock)-1)
+stspslp.load$stock <- sub("^$", "Global", stspslp.load$stock)
+
+## Plot stock-specific slopes - te_mar
+stk.spec.te_mar.load <-stspslp.load[stspslp.load$agent=="te_mar",]
+
+## Plot
+jpeg(filename='figs/Fig_SSHI ONNE stock sp slope_te_mar_load.jpg', 
+     width=480, height=500, quality=75)
+ggplot(stk.spec.te_mar.load) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_linerange(aes(x = reorder(stock, -X50), ymax = X75, ymin = X25), size=1.5, col="gray") +
+  geom_linerange(aes(x = stock, ymax = X97.5, ymin = X2.5), col="gray") +
+  geom_linerange(data=stk.spec.te_mar[stk.spec.te_mar$stock=="Global",], 
+                 aes(x = stock, ymax = X75, ymin = X25), size=2, col="black") +
+  geom_linerange(data=stk.spec.te_mar[stk.spec.te_mar$stock=="Global",], 
+                 aes(x = stock, ymax = X2.5, ymin = X97.5), col="black") +
+  geom_point(aes(x = stock, y = X50), size = 2) +
+  geom_point(data=stk.spec.te_mar[stk.spec.te_mar$stock=="Global",], aes(x = stock, y = X50), size = 3) +
+  labs(x="Stock", y="Effect size") +
+  coord_flip()
+dev.off()
+
+
+
+###################################################################
+## FOR ART:
+
+# PREVALENCE
+## Create a matrix and loop
+stk.spec.slope.art <- matrix(NA,
+                         nrow = 19,
+                         ncol = 7,
+                         dimnames = list(para_name2,c("5","25","40","60","75","90","agent")))
+
+for(i in agents){
+  model<-get(paste("mod",i, sep="."))
+  temp2 <- data.frame(model)
+  temp3 <- temp2[,grepl("prev",names(temp2))] #include only columns with "prev" in name
+  temp4 <- temp3[,-grep("igma",colnames(temp3))] #remove columns with "igma" in name
+  temp5 <- temp4[2001:4000,] #remove warm up iterations
+  temp6 <- data.frame(temp5[,1] + temp5[,2:19]) #add the stock-specific draws to global column
+  temp7 <- cbind(temp5[,1],temp6) #bind with global column
+  para_name2 <- colnames(temp5) #create an object with column names
+  colnames(temp7) <- colnames(temp5) #assign names to columns
+  nam <- paste("stk.spec.slope.art", i, sep = ".")
+  temp8 <- as.matrix(apply(temp7, 2, quantile, probs = c(0.05,0.25,0.40,0.60,0.75,0.90)))
+  temp9 <- t(temp8)
+  temp10<- as.matrix(cbind(temp9, paste(i)))
+  colnames(temp10) <- c("5","25","40","60","75","90","agent") #assign names to columns
+  as.matrix(assign(nam, stk.spec.slope.art[i] <- temp10))
+}
+
+#### Rbind all posteriors and save as .csv file
+stk.spec.slope.art.all <- rbind(stk.spec.slope.art.arena2,
+                            stk.spec.slope.art.c_b_cys,
+                            stk.spec.slope.art.ce_sha,
+                            stk.spec.slope.art.de_sal,
+                            stk.spec.slope.art.fa_mar,
+                            stk.spec.slope.art.fl_psy,
+                            stk.spec.slope.art.ic_hof,
+                            stk.spec.slope.art.ic_mul,
+                            stk.spec.slope.art.ku_thy,
+                            stk.spec.slope.art.lo_sal,
+                            stk.spec.slope.art.my_arc,
+                            stk.spec.slope.art.pa_kab,
+                            stk.spec.slope.art.pa_min,
+                            stk.spec.slope.art.pa_pse,
+                            stk.spec.slope.art.pa_ther,
+                            stk.spec.slope.art.prv,
+                            stk.spec.slope.art.pspv,
+                            stk.spec.slope.art.rlo,
+                            stk.spec.slope.art.sch,
+                            stk.spec.slope.art.sp_des,
+                            stk.spec.slope.art.te_bry,
+                            stk.spec.slope.art.te_mar,
+                            stk.spec.slope.art.ven)
+write.csv(stk.spec.slope.art.all, file="data/Stock specific slopes_prev_FOR ART.csv")
+
+##### READ IN DATA FROM FILE
+stspslp.art <- read.csv("data/Stock specific slopes_prev_FOR ART.csv")
+stspslp.art$stock <- substr(stspslp.art$X, 18, 28)
+stspslp.art$stock <- substr(stspslp.art$stock, 1, nchar(stspslp.art$stock)-1)
+stspslp.art$stock <- sub("^$", "Global", stspslp.art$stock)
+write.csv(stspslp.art, file="data/Stock specific slopes_prev_FOR ART.csv")
+
+# LOAD
+## Create a matrix and loop
+stk.spec.slope.load.art <- matrix(NA,
+                             nrow = 19,
+                             ncol = 7,
+                             dimnames = list(para_name2,c("5","25","40","60","75","90","agent")))
+
+for(i in agents){
+  model<-get(paste("mod.load",i, sep="."))
+  temp2 <- data.frame(model)
+  temp3 <- temp2[,grepl("load",names(temp2))] #include only columns with "prev" in name
+  temp4 <- temp3[,-grep("igma",colnames(temp3))] #remove columns with "igma" in name
+  temp5 <- temp4[2001:4000,] #remove warm up iterations
+  temp6 <- data.frame(temp5[,1] + temp5[,2:19]) #add the stock-specific draws to global column
+  temp7 <- cbind(temp5[,1],temp6) #bind with global column
+  para_name2 <- colnames(temp5) #create an object with column names
+  colnames(temp7) <- colnames(temp5) #assign names to columns
+  nam <- paste("stk.spec.slope.load.art", i, sep = ".")
+  temp8 <- as.matrix(apply(temp7, 2, quantile, probs = c(0.05,0.25,0.40,0.60,0.75,0.90)))
+  temp9 <- t(temp8)
+  temp10<- as.matrix(cbind(temp9, paste(i)))
+  colnames(temp10) <- c("5","25","40","60","75","90","agent") #assign names to columns
+  as.matrix(assign(nam, stk.spec.slope.load.art[i] <- temp10))
+}
+
+#### Rbind all posteriors and save as .csv file
+stk.spec.slope.load.art.all <- rbind(stk.spec.slope.load.art.arena2,
+                                stk.spec.slope.load.art.c_b_cys,
+                                stk.spec.slope.load.art.ce_sha,
+                                stk.spec.slope.load.art.de_sal,
+                                stk.spec.slope.load.art.fa_mar,
+                                stk.spec.slope.load.art.fl_psy,
+                                stk.spec.slope.load.art.ic_hof,
+                                stk.spec.slope.load.art.ic_mul,
+                                stk.spec.slope.load.art.ku_thy,
+                                stk.spec.slope.load.art.lo_sal,
+                                stk.spec.slope.load.art.my_arc,
+                                stk.spec.slope.load.art.pa_kab,
+                                stk.spec.slope.load.art.pa_min,
+                                stk.spec.slope.load.art.pa_pse,
+                                stk.spec.slope.load.art.pa_ther,
+                                stk.spec.slope.load.art.prv,
+                                stk.spec.slope.load.art.pspv,
+                                stk.spec.slope.load.art.rlo,
+                                stk.spec.slope.load.art.sch,
+                                stk.spec.slope.load.art.sp_des,
+                                stk.spec.slope.load.art.te_bry,
+                                stk.spec.slope.load.art.te_mar,
+                                stk.spec.slope.load.art.ven)
+write.csv(stk.spec.slope.load.art.all, file="data/Stock specific slopes_load_FOR ART.csv")
+
+##### READ IN DATA FROM FILE
+stspslp.load.art <- read.csv("data/Stock specific slopes_load_FOR ART.csv")
+stspslp.load.art$stock <- substr(stspslp.load.art$X, 18, 28)
+stspslp.load.art$stock <- substr(stspslp.load.art$stock, 1, nchar(stspslp.load.art$stock)-1)
+stspslp.load.art$stock <- sub("^$", "Global", stspslp.load.art$stock)
+write.csv(stspslp.load.art, file="data/Stock specific slopes_load_FOR ART.csv")
