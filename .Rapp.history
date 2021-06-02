@@ -1,5 +1,3 @@
-model_sch_stan <- stan_lmer(resid_value ~ 0 + prev_std + (prev_std|Stock_Analysis), data = data_sch)#
-summary(model_sch_stan)
 ## individual agent model#
 data_sch <- subset(inf_agt_resid_data, agent=="sch")
 ## individual model with STAN#
@@ -1594,3 +1592,4 @@ coefs_order <- coefs[order(coefs[,1]),]#
 	box(col="grey")
 inf_agt_resid_data <- subset(inf_agt_resid_data,Year != 2012)
 inf_agt_resid_data
+load("/Users/amyteffer/Documents.nosync/DFO PDF/Data/SSHI-sockeye/ONNE_with_dists.rds")
