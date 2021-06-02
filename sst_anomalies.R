@@ -3,6 +3,7 @@
 # download and process SST data and calculate early marine anomaly 
 # largely compliments of M. Malick (NOAA) see: https://michaelmalick.com/
 #########################################################################################
+<<<<<<< HEAD
 
 ## download and process SST data UNCOMMENT IF YOU NEED TO DOWNLOAD RAW SST
 #ersst::sst_download(years = 1950:2019,
@@ -11,32 +12,46 @@
 #                    version = 5)
 #
 #sst.raw.full <- ersst::sst_load(years = 1950:2019,
+=======
+# 
+# ## download and process SST data UNCOMMENT IF YOU NEED TO DOWNLOAD RAW SST
+# ersst::sst_download(years = 1950:2020,
+#                    months = 1:12,
+#                    save.dir = "./data/sst_raw/",
+#                    version = 5)
+# 
+# sst.raw.full <- ersst::sst_load(years = 1950:2020,
+>>>>>>> 19ded271aafafb8bc7265217ac02c572dd269f24
 #                                months = 1:12,
 #                                read.dir = "./data/sst_raw/",
 #                                version = 5)
-#
-#sst.raw.np <- ersst::sst_subset_space(sst.raw.full,
+# 
+# sst.raw.np <- ersst::sst_subset_space(sst.raw.full,
 #                                      lat.min = 36,
 #                                      lat.max = 80,
 #                                      lon.min = 170,
 #                                      lon.max = 250)
-#
-#sst.raw.df <- ersst::sst_dataframe(sst.raw.np)
-#
-#write.csv(sst.raw.df, "./data/sst_raw.csv", row.names = FALSE)
-
-sst.raw <- read.csv("./data/sst_raw.csv")
-head(sst.raw)
-tail(sst.raw)
-sapply(sst.raw, class)
-summary(sst.raw)
+# 
+# sst.raw.df <- ersst::sst_dataframe(sst.raw.np)
+# 
+# write.csv(sst.raw.df, "./data/sst_raw.csv", row.names = FALSE)
+# 
+# sst.raw <- read.csv("./data/sst_raw.csv")
+# head(sst.raw)
+# tail(sst.raw)
+# sapply(sst.raw, class)
+# summary(sst.raw)
 
 #------------------------------------------------------------------------------#
 #   Calculate SST anomalies and average across specified period and region 
 #------------------------------------------------------------------------------#
 
 ## Calculate SST anomalies
+<<<<<<< HEAD
 sst.anom <- sst.anomaly(sst.raw, ref.years = 1950:2019)
+=======
+sst.anom <- sst.anomaly(sst.raw, ref.years = 1950:2020)
+>>>>>>> 19ded271aafafb8bc7265217ac02c572dd269f24
 head(sst.anom)
 tail(sst.anom)
 summary(sst.anom)
