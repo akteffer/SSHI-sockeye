@@ -374,7 +374,7 @@ dev.off()
 #Remove Circo.virus and Qin - effect size distributions are too wide to have confidence
 md_surv.plot<-md_surv#[!(md_surv$agent=="Circo.virus" | md_surv$agent=="Qin" | md_surv$agent=="nu_sal"),]
 unique(md_surv.plot$agent)
-myDataFrame["rowName", "columnName"] <- value
+#myDataFrame["rowName", "columnName"] <- value
 
 # SW plot with agents >1% prevalence
 temp1 <- subset(md_surv.plot, SW_prev>1)
