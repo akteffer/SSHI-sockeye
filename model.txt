@@ -1,0 +1,25 @@
+model {
+  sig_yr ~ dunif(0, 2)
+  sig_resid ~ dunif(0, 2)
+  sig_prior ~ dunif(0, 2)
+  sig_jaz ~ dunif(0, 2)
+  sig_B2 ~ dunif(0, 2)
+  sig_B0 ~ dunif(0, 2)
+  pow ~ dunif(0, 2)
+  for (y in 1:n_yrs) {
+    yr_eff[y] ~ dnorm(0, 1/sig_yr^2)
+  }
+  for (s in 1:n_jaz) {
+    b0[s] ~ dnorm(B0, 1/sig_B0^2)
+    b2[s] ~ dnorm(B2, 1/sig_B2^2)
+  }
+  B0 ~ dnorm(0, 1e-06)
+  b1 ~ dnorm(0, 1e-06)
+  B2 ~ dnorm(0, 1e-06)
+  b3 ~ dnorm(0, 1e-06)
+  for (q in 1:n_obs) {
+    Mass[q] ~ dnorm(Mass_hat[q], 1/sig_resid^2)
+    Mass_hat[q] <- b0[jaz[q]] + b1 * length[q] + b2[jaz[q]] * (pathogen[q])^pow + b3 * sst[q] + yr_eff[yr[q]]
+    residual[q] <- Mass[q] - Mass_hat[q]
+  }
+}

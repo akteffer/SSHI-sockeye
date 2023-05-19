@@ -28,7 +28,7 @@ library(plyr)
 library(tidyverse)
 library(viridis)
 source("functions.R")
-# source("sst_anomalies.R") 
+#source("sst_anomalies.R") 
 ```
 ```{r , warning=FALSE}
 ## load Fraser sockeye brood table
@@ -199,3 +199,5 @@ ggplot(survial_indicesL[survial_indicesL$brood_year>2007,], aes(brood_year, valu
   theme_bw()
 ```
 These index values are what can be related to prevalence/load profiles of out-migrating juveniles in stage 2 of the analyses. Looks like some reasonable contrast among years and stocks. My advice for stage 2 is to use the stock-recruit residuals without covariates as the base survival index, and do a sensitivity analysis with the other two. 
+
+

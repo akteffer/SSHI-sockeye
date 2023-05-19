@@ -1,0 +1,47 @@
+abbrev,pathogen,font,abb_name
+ae_sal,Aeromonas salmonicida,3,A. salmonicida
+arena1,Salmon Pescarenavirus 1,1,SPAv1
+arena2,Salmon Pescarenavirus 2,1,SPAv2
+ascv,Atlantic Salmon Calicivirus,1,ASCv
+c_b_cys,Candidatus Branchiomonas cysticola,3,Ca. B. cysticola
+ce_sha,Ceratonova shasta,3,C. shasta
+cov,Pacific Salmon Nidovirus,1,PSNv
+cr_sal,Cryptobia salmositica,3,C. salmositica
+ctv,Cutthroat Trout Virus,1,CTv
+de_sal,Dermocystidium salmonis,3,D. salmonis
+fa_mar,Facilispora margolisi,3,F. margolisi
+fl_psy,Flavobacterium psychrophilum,3,F. psychrophilum
+ic_hof,Ichthyophonus hoferi,3,I. hoferi
+ic_mul,Ichthyophthirius multifiliis,3,I. multifiliis
+ihnv,Infecious Hematopoietic Necrosis Virus,1,IHNv
+ku_thy,Kudoa thyrsites,3,K. thyrsites
+lo_sal,Loma salmonae,3,L. salmonae
+my_arc,Myxobolus arcticus,3,M. arcticus
+my_ins,Myxobolus insidiosus,3,M. insidiosus
+na_sal,Nanophyetus salmincola,3,N. salmincola
+ne_per,Neoparamoeba perurans,3,N. perurans
+pa_kab,Parvicapsula kabatai,3,P. kabatai
+pa_min,Parvicapsula minibicornis,3,P. minibicornis
+pa_pse,Parvicapsula pseudobranchicola,3,P. pseudobranchicola
+pa_ther,Paranucleospora theridion,3,P. theridion
+pch_sal,Candidatus Piscichlamydia salmonis,3,Ca. P. salmonis
+pisck_sal,Piscirickettsia salmonis,3,P. salmonis
+prv,Piscine Orthoreovirus,1,PRv
+pspv,Pacific Salmon Parvovirus,1,PSPv
+re_sal,Renibacterium salmoninarum,3,R. salmoninarum
+rlo,Rickettsia-like Organism,1,RLO
+sch,Candidatus Syngnamydia salmonis,3,Ca. S. salmonis
+smallUK,Putative RNA Virus 1,1,PRNAv
+sp_des,Sphaerothecum destruens,3,S. destruens
+te_bry,Tetracapsuloides bryosalmonae,3,T. bryosalmonae
+te_mar,Tenacibaculum maritimum,3,T. maritimum
+toti,Putative toti-like virus,1,Ptoti
+ven,Erythrocytic Necrosis Virus,1,ENv
+ver,Viral Encephalopathy and Retinopathy Virus,1,VERv
+vhsv,Viral Hemorrhagic Septicemia Virus,1,VHSv
+vi_sal,Vibrio salmonicida,3,V. salmonicida
+n_path,Number total pathogen taxa,1,# total taxa
+rib,Relative infectious agent burden,1,RIB
+SST,Sea surface temperature anomaly,1,SST
+avg_n_path,Total number of pathogen taxa,1,TPT
+avg_RIB,Relative infectious agent burden,1,RIB

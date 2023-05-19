@@ -21,10 +21,10 @@ library(dplyr)
 
 #### Read in data, clean, standardize - stock-specific metrics
 ##### SW
-inf_agt_resid_data <- read.csv("data/ONNE productivity infection analysis_stockspecific_210519.csv")
+inf_agt_resid_data <- read.csv("data/ONNE productivity infection analysis_stockspecific_210603.csv")
 head(inf_agt_resid_data)
 ##### FW
-inf_agt_resid_data_fw <- read.csv("data/ONNE productivity infection analysis_stockspecific_FW_210519.csv")
+inf_agt_resid_data_fw <- read.csv("data/ONNE productivity infection analysis_stockspecific_FW_210603.csv")
 head(inf_agt_resid_data_fw)
 
 # Data cleaning
@@ -342,10 +342,10 @@ for(i in agents){
                       digits = 2)
   coefs_stan[i,] <- ind_coef[1,c(4:8)]
 }
-write.csv(coefs_stan, file="data/prev_coefs_stan_stspec_210519.csv")
+write.csv(coefs_stan, file="data/prev_coefs_stan_stspec_210603.csv")
 
 # Load estimates from file (if not running full model) and assign rownames
-coefs_stan <- read.csv("data/prev_coefs_stan_stspec_210519.csv")
+coefs_stan <- read.csv("data/prev_coefs_stan_stspec_210603.csv")
 rownames(coefs_stan) <- coefs_stan[,1]
 coefs_stan <- coefs_stan[,-1]  
 
@@ -353,7 +353,7 @@ coefs_stan <- coefs_stan[,-1]
 # Plot effect size per agent
 coefs_order <- coefs_stan[order(-coefs_stan[,3]),]
 
-jpeg(filename='figs/Fig_prev_coefs_stan_stspec.jpg', 
+jpeg(filename='figs/Fig_prev_coefs_stan_stspec_210603.jpg', 
      width=480, height=500, quality=75)
 par(mfrow=c(1,1), mar=c(3,1,1,1),oma=c(0.5,0.5,0.5,0.5))
 plotCI(x = coefs_order[,3],
@@ -584,7 +584,7 @@ post_int_slpintsig <- rbind(coefs_stan_stk_int.arena2,
                             coefs_stan_stk_year.te_mar,
                             coefs_stan_stk_year.ven)
 
-write.csv(post_int_slpintsig, file="data/Posterior distributions_Int Slp Sig_stspec_prev.csv")
+write.csv(post_int_slpintsig, file="data/Posterior distributions_Int Slp Sig_stspec_prev_210603.csv")
 
 #### Rbind all convergence parameters and save as .csv file
 post_rhatneff_prev <- rbind(coefs_stan_stk_rhat.arena2,
@@ -636,16 +636,16 @@ post_rhatneff_prev <- rbind(coefs_stan_stk_rhat.arena2,
                             coefs_stan_stk_neff.te_mar,
                             coefs_stan_stk_neff.ven)
 
-write.csv(post_rhatneff_prev, file="data/Posterior distributions_Rhat and Neff_stspec_prev.csv")
+write.csv(post_rhatneff_prev, file="data/Posterior distributions_Rhat and Neff_stspec_prev_210603.csv")
 
 ### Plot posteriors per agent model from files
 post_all <- post_int_slpintsig
-post_all <- read.csv("data/Posterior distributions_Int Slp Sig_stspec_prev.csv")
-post_agents <- read.csv("data/prev_coefs_stan_stspec_210519.csv")
+post_all <- read.csv("data/Posterior distributions_Int Slp Sig_stspec_prev_210603.csv")
+post_agents <- read.csv("data/prev_coefs_stan_stspec_210603.csv")
 post_agents <- post_agents[order(match(post_agents[,1],propzero[,1])),]
 
 ## Plot Posteriors for all agents
-jpeg(filename='figs/Fig_prev_coefs_stan_stspec_blue_210519.jpg', 
+jpeg(filename='figs/Fig_prev_coefs_stan_stspec_blue_210603.jpg', 
       width=480, height=500, quality=75)
 ggplot(post_agents) +
   geom_hline(yintercept = 0, linetype = "dashed") +
@@ -683,15 +683,15 @@ dev.off()
 
 ## Plots per agent
 #### Extract output from agent model
-post_ic_mul <- post_all[post_all$X.1=="ic_mul",]
+post_c_b_cys <- post_all[post_all$X.1=="c_b_cys",]
 
-## Extract Posterior slopes by Stock - ic_mul
-post_ic_mul_stockslp <- post_ic_mul[grep("prev_std Stock", post_ic_mul$X) ,]
+## Extract Posterior slopes by Stock - c_b_cys
+post_c_b_cys_stockslp <- post_c_b_cys[grep("prev_std Stock", post_c_b_cys$X) ,]
 
 #### Plot
-jpeg(filename='figs/Fig_ic_mul_prev_stspec_bystock.jpg', 
+jpeg(filename='figs/Fig_c_b_cys_prev_stspec_bystock.jpg', 
      width=480, height=500, quality=75)
-ggplot(post_ic_mul_stockslp) +
+ggplot(post_c_b_cys_stockslp) +
   geom_hline(yintercept = 0, linetype = "dashed", col="blue")+
   geom_linerange(aes(x = reorder(X, -X50.), ymax = X75., ymin = X25.), size=1.5, col="black") +
   geom_linerange(aes(x = X, ymax = X97.5., ymin = X2.5.), col="black") +
@@ -700,10 +700,10 @@ ggplot(post_ic_mul_stockslp) +
   coord_flip()
 dev.off()
 
-## Extract Posterior intercepts for Stocks - ic_mul example
-post_ic_mul_stockint <- post_ic_mul[c(1:18) ,]
+## Extract Posterior intercepts for Stocks - c_b_cys example
+post_c_b_cys_stockint <- post_c_b_cys[c(1:18) ,]
 ## Plot
-ggplot(post_ic_mul_stockint) +
+ggplot(post_c_b_cys_stockint) +
   geom_hline(yintercept = 0, linetype = "dashed")+
   geom_linerange(aes(x = reorder(X, -X50.), ymax = X75., ymin = X25.), size=1.5, col="gray") +
   geom_linerange(aes(x = X, ymax = X97.5., ymin = X2.5.), col="gray") +
@@ -711,9 +711,9 @@ ggplot(post_ic_mul_stockint) +
   coord_flip()
 
 ## Extract sigma values
-post_ic_mul_stocksig <- post_ic_mul[grep("igma", post_ic_mul$X) ,]
+post_c_b_cys_stocksig <- post_c_b_cys[grep("igma", post_c_b_cys$X) ,]
 ## Plot
-ggplot(post_ic_mul_stocksig) +
+ggplot(post_c_b_cys_stocksig) +
   geom_hline(yintercept = 0, linetype = "dashed")+
   geom_linerange(aes(x = X, ymax = X75., ymin = X25.), size=1.5, col="gray") +
   geom_linerange(aes(x = X, ymax = X97.5., ymin = X2.5.), col="gray") +
@@ -721,9 +721,9 @@ ggplot(post_ic_mul_stocksig) +
   coord_flip()
 
 ## Extract Posterior intercepts for years
-post_ic_mul_year <- post_ic_mul[grep("b\\[\\(\\Intercept) Year", post_ic_mul$X) ,]
+post_c_b_cys_year <- post_c_b_cys[grep("b\\[\\(\\Intercept) Year", post_c_b_cys$X) ,]
 ## Plot
-ggplot(post_ic_mul_year) +
+ggplot(post_c_b_cys_year) +
   geom_hline(yintercept = 0, linetype = "dashed")+
   geom_linerange(aes(x = reorder(X, -X50.), ymax = X75., ymin = X25.), size=1.5, col="gray") +
   geom_linerange(aes(x = X, ymax = X97.5., ymin = X2.5.), col="gray") +
@@ -793,18 +793,38 @@ stk.spec.slope.all <- rbind(stk.spec.slope.arena2,
                             stk.spec.slope.te_bry,
                             stk.spec.slope.te_mar,
                             stk.spec.slope.ven)
-write.csv(stk.spec.slope.all, file="data/Stock specific slopes_prev_stspec_210519.csv")
+write.csv(stk.spec.slope.all, file="data/Stock specific slopes_prev_stspec_210603.csv")
 
 ##### READ IN DATA FROM FILE
-stspslp <- read.csv("data/Stock specific slopes_prev_stspec_210519.csv")
+stspslp <- read.csv("data/Stock specific slopes_prev_stspec_210603.csv")
 stspslp$stock <- substr(stspslp$X, 18, 28)
 stspslp$stock <- substr(stspslp$stock, 1, nchar(stspslp$stock)-1)
 stspslp$stock <- sub("^$", "Overall", stspslp$stock)
 
+
+## Plot stock-specific slopes - c_b_cys
+stk.spec.c_b_cys <-stspslp[stspslp$agent=="c_b_cys",]
+## Plot
+jpeg(filename='figs/Fig_stockspslope_c_b_cys_stspec_210603.jpg', 
+     width=480, height=500, quality=75)
+ggplot(stk.spec.c_b_cys) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_linerange(aes(x = reorder(stock, -X50), ymax = X75, ymin = X25), size=1.5, col="gray") +
+  geom_linerange(aes(x = stock, ymax = X97.5, ymin = X2.5), col="gray") +
+  geom_linerange(data=stk.spec.c_b_cys[stk.spec.c_b_cys$stock=="Global",], 
+                 aes(x = stock, ymax = X75, ymin = X25), size=2, col="black") +
+  geom_linerange(data=stk.spec.c_b_cys[stk.spec.c_b_cys$stock=="Global",], 
+                 aes(x = stock, ymax = X2.5, ymin = X97.5), col="black") +
+  geom_point(aes(x = stock, y = X50), size = 2) +
+  geom_point(data=stk.spec.c_b_cys[stk.spec.c_b_cys$stock=="Global",], aes(x = stock, y = X50), size = 3) +
+  labs(x="Stock", y="Effect size", title="Ca. B. cysticola") +
+  coord_flip()
+dev.off()
+
 ## Extract stock-specific slopes - ic_mul model
 stk.spec.ic_mul <-stspslp[stspslp$agent=="ic_mul",]
 ## Plot
-jpeg(filename='figs/Fig_stockspslope_ic_mul_stspec_210519.jpg', 
+jpeg(filename='figs/Fig_stockspslope_ic_mul_stspec_210603.jpg', 
      width=480, height=500, quality=75)
 ggplot(stk.spec.ic_mul) +
   geom_hline(yintercept = 0, linetype = "dashed") +
@@ -823,7 +843,7 @@ dev.off()
 ## Plot stock-specific slopes - pa_ther
 stk.spec.pa_ther <-stspslp[stspslp$agent=="pa_ther",]
 ## Plot
-jpeg(filename='figs/Fig_SSHI ONNE_stock sp slope_pa_ther_210519.jpg', 
+jpeg(filename='figs/Fig_SSHI ONNE_stock sp slope_pa_ther_210603.jpg', 
      width=480, height=500, quality=75)
 ggplot(stk.spec.pa_ther) +
   geom_hline(yintercept = 0, linetype = "dashed") +
@@ -835,27 +855,45 @@ ggplot(stk.spec.pa_ther) +
                  aes(x = stock, ymax = X2.5, ymin = X97.5), col="black") +
   geom_point(aes(x = stock, y = X50), size = 2) +
   geom_point(data=stk.spec.pa_ther[stk.spec.pa_ther$stock=="Global",], aes(x = stock, y = X50), size = 3) +
-  labs(x="Stock", y="Effect size") +
+  labs(x="Stock", y="Effect size", title="P. theridion") +
   coord_flip()
 dev.off()
 
-
-## Plot stock-specific slopes - c_b_cys
-stk.spec.c_b_cys <-stspslp[stspslp$agent=="c_b_cys",]
+## Plot stock-specific slopes - te_mar
+stk.spec.te_mar <-stspslp[stspslp$agent=="te_mar",]
 ## Plot
-jpeg(filename='figs/Fig_stockspslope_c_b_cys_stspec_210519.jpg', 
+jpeg(filename='figs/Fig_SSHI ONNE_stock sp slope_te_mar_210603.jpg', 
      width=480, height=500, quality=75)
-ggplot(stk.spec.c_b_cys) +
+ggplot(stk.spec.te_mar) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_linerange(aes(x = reorder(stock, -X50), ymax = X75, ymin = X25), size=1.5, col="gray") +
   geom_linerange(aes(x = stock, ymax = X97.5, ymin = X2.5), col="gray") +
-  geom_linerange(data=stk.spec.c_b_cys[stk.spec.c_b_cys$stock=="Global",], 
+  geom_linerange(data=stk.spec.te_mar[stk.spec.te_mar$stock=="Global",], 
                  aes(x = stock, ymax = X75, ymin = X25), size=2, col="black") +
-  geom_linerange(data=stk.spec.c_b_cys[stk.spec.c_b_cys$stock=="Global",], 
+  geom_linerange(data=stk.spec.te_mar[stk.spec.te_mar$stock=="Global",], 
                  aes(x = stock, ymax = X2.5, ymin = X97.5), col="black") +
   geom_point(aes(x = stock, y = X50), size = 2) +
-  geom_point(data=stk.spec.c_b_cys[stk.spec.c_b_cys$stock=="Global",], aes(x = stock, y = X50), size = 3) +
-  labs(x="Stock", y="Effect size", title="P. theridion") +
+  geom_point(data=stk.spec.te_mar[stk.spec.te_mar$stock=="Global",], aes(x = stock, y = X50), size = 3) +
+  labs(x="Stock", y="Effect size", title="T. maritinum") +
+  coord_flip()
+dev.off()
+
+## Plot stock-specific slopes - lo_sal
+stk.spec.lo_sal <-stspslp[stspslp$agent=="lo_sal",]
+## Plot
+jpeg(filename='figs/Fig_SSHI ONNE_stock sp slope_lo_sal_210603.jpg', 
+     width=480, height=500, quality=75)
+ggplot(stk.spec.lo_sal) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_linerange(aes(x = reorder(stock, -X50), ymax = X75, ymin = X25), size=1.5, col="gray") +
+  geom_linerange(aes(x = stock, ymax = X97.5, ymin = X2.5), col="gray") +
+  geom_linerange(data=stk.spec.lo_sal[stk.spec.lo_sal$stock=="Global",], 
+                 aes(x = stock, ymax = X75, ymin = X25), size=2, col="black") +
+  geom_linerange(data=stk.spec.lo_sal[stk.spec.lo_sal$stock=="Global",], 
+                 aes(x = stock, ymax = X2.5, ymin = X97.5), col="black") +
+  geom_point(aes(x = stock, y = X50), size = 2) +
+  geom_point(data=stk.spec.lo_sal[stk.spec.lo_sal$stock=="Global",], aes(x = stock, y = X50), size = 3) +
+  labs(x="Stock", y="Effect size", title="L. salmonae") +
   coord_flip()
 dev.off()
 
@@ -874,13 +912,13 @@ for (i in agents){
   temp <- as.matrix((colSums(model2 < 0))/2000)
   param.prop0[i,] <- temp[1,]
 }
-write.csv(param.prop0, file="data/Percent post draws >0_prev_stspec_210519.csv")
+write.csv(param.prop0, file="data/Percent post draws >0_prev_stspec_210603.csv")
 
 
 
 
 # plot
-propzero <- read.csv("data/Percent post draws >0_prev_stspec_210519.csv")
+propzero <- read.csv("data/Percent post draws >0_prev_stspec_210603.csv")
 propzero$plot.agent <- propzero$X
 propzero$plot.agent <- recode(propzero$plot.agent, "ic_mul" = "I. multifiliis", 
                                         "te_mar" = "T. maritinum",
@@ -906,7 +944,7 @@ propzero$plot.agent <- recode(propzero$plot.agent, "ic_mul" = "I. multifiliis",
                                         "pa_pse" = "P. pseudobranchicola",
                                         "de_sal" = "D. salmonis")
 
-jpeg(filename='figs/Fig_prop<0_pa_ther_stspec.jpg', 
+jpeg(filename='figs/Fig_prop<0 posterior_stspec_210603.jpg', 
      width=480, height=500, quality=75)
 ggplot(propzero) +
   geom_bar(stat="identity", aes(reorder(plot.agent, prev_prop_neg), prev_prop_neg), col="blue", fill="blue", width=0.5, alpha=0.5) +
@@ -915,11 +953,6 @@ ggplot(propzero) +
   theme(axis.text.y = element_text(face = "italic"))+
   coord_flip()
 dev.off()
-
-### Violin plot?
-ggplot(propzero, aes(plot.agent, prev_prop_neg)) + 
-  geom_violin()+
-  coord_flip()
 
 
 

@@ -3,16 +3,6 @@
 # download and process SST data and calculate early marine anomaly 
 # largely compliments of M. Malick (NOAA) see: https://michaelmalick.com/
 #########################################################################################
-<<<<<<< HEAD
-
-## download and process SST data UNCOMMENT IF YOU NEED TO DOWNLOAD RAW SST
-#ersst::sst_download(years = 1950:2019,
-#                    months = 1:12,
-#                    save.dir = "./data/sst_raw/",
-#                    version = 5)
-#
-#sst.raw.full <- ersst::sst_load(years = 1950:2019,
-=======
 # 
 # ## download and process SST data UNCOMMENT IF YOU NEED TO DOWNLOAD RAW SST
 # ersst::sst_download(years = 1950:2020,
@@ -21,7 +11,6 @@
 #                    version = 5)
 # 
 # sst.raw.full <- ersst::sst_load(years = 1950:2020,
->>>>>>> 19ded271aafafb8bc7265217ac02c572dd269f24
 #                                months = 1:12,
 #                                read.dir = "./data/sst_raw/",
 #                                version = 5)
@@ -47,11 +36,7 @@
 #------------------------------------------------------------------------------#
 
 ## Calculate SST anomalies
-<<<<<<< HEAD
-sst.anom <- sst.anomaly(sst.raw, ref.years = 1950:2019)
-=======
 sst.anom <- sst.anomaly(sst.raw, ref.years = 1950:2020)
->>>>>>> 19ded271aafafb8bc7265217ac02c572dd269f24
 head(sst.anom)
 tail(sst.anom)
 summary(sst.anom)

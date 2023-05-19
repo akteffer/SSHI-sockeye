@@ -1,0 +1,27 @@
+"","FW survival","SW survival","FW mass deviation","SW mass deviation"
+"T. bryosalmonae",0.173,0.922,0.813,0.816
+"F. psychrophilum",0.854,0.592,0.543,0.552
+"PSPV",0.821,0.113,0.72,0.721
+"I. multifiliis",0.734,0.397,0.552,0.561
+"RIB",0.748,0.841,0.25,0.25
+"RLO",0.847,0.591,0.117,0.125
+"Richness",0.763,0.811,0.039,0.041
+"C. shasta",0.466,0.224,0.44,0.437
+"M. arcticus",0.464,0.825,0.062,0.062
+"Ca. B. cysticola",0.156,0.917,0.054,0.043
+"P. minibicornis",0.214,0.174,0.26,0.257
+"SPAV-2",0.384,0.762,NA,0.752
+"D. salmonis",0.781,0.494,NA,0.419
+"F. margolisi",NA,0.115,NA,0.827
+"I. hoferi",0.04,0.191,NA,0.637
+"Ichthyobodo sp.",0.356,0.584,NA,0.396
+"L. salmonae",0.523,0.256,NA,0.007
+"P. kabatai",0.782,0.103,NA,0.095
+"P. pseudobranchicola",0.42,0.558,NA,0.26
+"P. theridion",0.739,0.378,NA,0.194
+"PRV",0.606,0.5,NA,0.612
+"Ca. S. salmonis",0.568,0.38,NA,0.479
+"Putitive RNA virus",0.386,NA,NA,0.361
+"S. destruens",0.474,0.123,NA,0.352
+"T. maritinum",0.538,0.728,NA,0.393
+"ENV",0.897,0.184,NA,0.637

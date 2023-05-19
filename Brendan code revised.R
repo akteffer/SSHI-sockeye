@@ -1,62 +1,40 @@
 
-#SSHI sockeye exploratory analyses (stage 1)
-
-#B. Connors
-
-#2019-07-12
-
-#Quick exploratory analyses to derive Fraser sockeye survival indices. All code and associated data can be found on Github here.
-
-#Fraser brood table provided to A. Teffer by PSC, recent missing estimates of spawners in PSC brood table were added from file provided to A. Teffer by DFO (M. Hawkshaw).
-
-#To (re)generate the SST data you need to run the ?????????sst_anomalies.R????????? file that is commented out below and make sure the ersst package is installed (see here).
-
-#To do:
-  
-#  predict 5 year old recruits for 2014 brood year for all stocks based on stock-specific average proportion of 5 year old recruits, right now 5 year olds from the 2014 broodyear (that will return this summer) are simply assumed to be zero.
-#consider adding central coast stocks (Atnarko and Owikeno) to analyses
-
-## load required packages and functions
-library(devtools)
-#install_github(repo = "michaelmalick/r-ersst")
-library(ersst)
-library(plyr)
-library(tidyverse)
-library(viridis)
-source("functions.R")
-source("sst_anomalies.R") 
-  
-  ### SSHI sockeye exploratory analyses (stage 1)
-  #### by B. Connors
-  ##### revised by A. Teffer 
+### SSHI sockeye exploratory analyses (stage 1)
+#### by B. Connors
+##### revised by A. Teffer 
 
 #Quick exploratory analyses to derive Fraser sockeye survival indices. All code and associated data can be found on Github [here](https://github.com/brendanmichaelconnors/SSHI-sockeye). 
 #Fraser brood table provided to A. Teffer by PSC, recent missing estimates of spawners in PSC brood table were added from file provided to A. Teffer by DFO (M. Hawkshaw).
 #Updated data from Steve Latham at PSC: (productiondata(by_stock)VERYprel-20mailout(Oct02_20).xlsx). Updated return data from Tracy Cone at DFO:(Sockeye all from 1950.xlsx) -> all integrated into "fraser_brood_table_210519.txt" in data folder by AKT
 #To (re)generate the SST data you need to run the "sst_anomalies.R" file that is commented out below and make sure the ersst package is installed (see [here](https://github.com/michaelmalick/r-ersst)).
 
-#To do: 
-#* predict 5 year old recruits for 2014 brood year for all stocks based on stock-specific average proportion of 5 year old recruits, right now  5 year olds from the 2014 broodyear (that will return this summer) are simply assumed to be zero.
-#* consider adding central coast stocks (Atnarko and Owikeno) to analyses 
 
+## load required packages and functions
+library(ersst)     
+library(plyr)
+library(tidyverse)
+library(viridis)
+source("functions.R")
+#source("sst_anomalies.R") 
 
 ## load Fraser sockeye brood table
-raw_brood_table <- read.delim("data/fraser_brood_table_210519.txt")
+raw_brood_table <- read.delim("data/fraser_brood_table_210528.txt")
 raw_brood_table$total_effective_female_spawner <- as.factor(raw_brood_table$total_effective_female_spawner)
-#str(raw_brood_table)
+str(raw_brood_table)
 
 ## clean up brood table, add a few new columns
-brood_table <- subset(raw_brood_table, BY < 2016) 
+brood_table <- subset(raw_brood_table, BY < 2017) 
 brood_table <- subset(brood_table, BY > 1949) 
 brood_table <- subset(brood_table, stock_name != "Cultus")  
 brood_table$efs <-as.numeric(levels(brood_table$total_effective_female_spawner)
-                             )[brood_table$total_effective_female_spawner]
+)[brood_table$total_effective_female_spawner]
 
 brood_table$efs_lag1 <-lag(brood_table$efs,1)
 brood_table$efs_lag2 <-lag(brood_table$efs,2)
 brood_table$efs_lag3 <-lag(brood_table$efs,3)
 brood_table$age.51 <- 0
-brood_table$lnRS <-log(brood_table$recruits_no_jacks/brood_table$efs)
+# brood_table$lnRS <-log(brood_table$recruits_no_jacks/brood_table$efs)
+brood_table$lnRS <-log(brood_table$total_recruits/brood_table$efs)
 brood_table <- brood_table[!is.na(brood_table$lnRS),] 
 brood_table <- brood_table[brood_table$lnRS != "-Inf",] 
 brood_table<-brood_table[!is.na(brood_table$Stock.ID),]
@@ -90,16 +68,7 @@ head(early.sst)
 ## derive pink salmon competitor indices
 ##  empirical  through 2015, extrapolated based on last four years of data 
 ##  for odd and even lines thereafter
-raw.comp <- read.csv(file="data/pink_abundance_2017_12_08.csv",header=TRUE)
-
-extrap_pinks <- matrix(NA,4,16,dimnames = list(seq(1:4),colnames(raw.comp)))
-extrap_pinks[1:4,1] <- c(2016,2017,2018,2019)
-extrap_pinks[1:4,16] <- c(median(raw.comp$Total[c(57,59,61,63)]),
-                          median(raw.comp$Total[c(58,60,62,64)]),
-                          median(raw.comp$Total[c(57,59,61,63)]),
-                          median(raw.comp$Total[c(58,60,62,64)]))
-
-raw.comp <- rbind(raw.comp,extrap_pinks)
+raw.comp <- read.csv(file="data/pink_abundance_2021_05_28.csv",header=TRUE)
 
 np.pink <- pink.wgt.avg(brood.table = brood_table,
                         pink.data = raw.comp,
@@ -109,15 +78,15 @@ np.pink <- pink.wgt.avg(brood.table = brood_table,
 head(np.pink)
 
 ## merge datasets, normalized covariates, export
-master.bt <- merge(brood_table, early.sst, by=c("BY","Stock.ID"),all.x=T)
-#master.bt <- merge(master.1, np.pink, by=c("BY","Stock.ID"),all.x=T) # I removed pink data as we are primarily interested in SST influences
+master.1 <- merge(brood_table, early.sst, by=c("BY","Stock.ID"),all.x=T)
+master.bt <- merge(master.1, np.pink, by=c("BY","Stock.ID"),all.x=T) 
 master.bt <- master.bt[order(master.bt$Stock.ID),]
 master.bt_w_cov <- plyr::ddply(master.bt, .(Stock.ID), transform,
                                early_sst_stnd = scale(early_sst)[ , 1]
-                               #,np_pinks_stnd = scale(np_pinks)[ , 1]
+                               ,np_pinks_stnd = scale(np_pinks)[ , 1]
 )  
 head(master.bt_w_cov)
-write.csv(master.bt_w_cov, "data/master_brood_table_covar_210519.csv", row.names=FALSE)
+write.csv(master.bt_w_cov, "data/master_brood_table_covar_210528.csv", row.names=FALSE)
 
 ## derive sockeye survival indices
 ##  lnRS = natural log of recruits per spawner
@@ -131,7 +100,7 @@ survial_indices <- plyr::ddply(master.bt_w_cov, c("stock_name"),function(x) {
   SR_fit <- lm(x$lnRS~x$efs,na.action=na.exclude)
   SR_resid <- scale(resid(SR_fit))
   SR_fit_cov <- lm(x$lnRS~x$efs+
-                     #x$np_pinks_stnd+
+                     x$np_pinks_stnd+
                      x$early_sst_stnd,na.action=na.exclude)
   SR_cov_resid <- scale(resid(SR_fit_cov))
   
@@ -144,7 +113,7 @@ survial_indices <- plyr::ddply(master.bt_w_cov, c("stock_name"),function(x) {
                        x$efs_lag1+
                        x$efs_lag2+
                        x$efs_lag3+
-                       #x$np_pinks_stnd+
+                       x$np_pinks_stnd+
                        x$early_sst_stnd,na.action=na.exclude)
     SR_cov_resid <- scale(resid(SR_fit_cov))                            
   }
@@ -155,45 +124,39 @@ survial_indices <- plyr::ddply(master.bt_w_cov, c("stock_name"),function(x) {
 
 survial_indicesL<-gather(survial_indices,survival_index,value,SR_resid:lnRS)
 head(survial_indices)
+write.csv(survial_indices, file="data/survival_indices_ONNE.csv")
 
 ## what are magnitude and direction of covariate "effects"?
 cov_effects <- plyr::ddply(master.bt_w_cov, c("stock_name"),function(x) {
   SR_fit_cov <- lm(x$lnRS~x$efs+
-                     #x$np_pinks_stnd+
+                     x$np_pinks_stnd+
                      x$early_sst_stnd,na.action=na.exclude)
-  #pink <- round(SR_fit_cov$coefficients[3],digits=3)
-  sst <- round(SR_fit_cov$coefficients[3],digits=3)
+  pink <- round(SR_fit_cov$coefficients[3],digits=3)
+  sst <- round(SR_fit_cov$coefficients[4],digits=3)
   if(unique(x$stock_name) %in% larkin){
     SR_fit_cov <- lm(x$lnRS~x$efs+
                        x$efs_lag1+
                        x$efs_lag2+
                        x$efs_lag3+
-                       #x$np_pinks_stnd+
+                       x$np_pinks_stnd+
                        x$early_sst_stnd,na.action=na.exclude)
-    #pink <- round(SR_fit_cov$coefficients[6],digits=3)
-    sst <- round(SR_fit_cov$coefficients[6],digits=3)}
-  data.frame(#pink,
-    sst)})
+    pink <- round(SR_fit_cov$coefficients[6],digits=3)
+    sst <- round(SR_fit_cov$coefficients[7],digits=3)}
+  data.frame(pink,sst)})
 
-#cov_effectsL<-gather(cov_effects,covariate,value,pink:sst)
+cov_effectsL<-gather(cov_effects,covariate,value,pink:sst)
 print(cov_effects)
 
-##### Plot just SST covariate effect
-ggplot(cov_effects
-       ,aes(x=sst
-            #value, color = covariate, fill = covariate
-       ))+
+ggplot(cov_effectsL,aes(x=value, color = covariate, fill = covariate))+
   geom_density(alpha=0.5)+
   geom_rug()+
-  scale_x_continuous(limits=c(-0.75,0.5))+
+  scale_x_continuous(limits=c(-1,0.5))+
   scale_fill_viridis(discrete = T)+
   ylab("")+
   xlab("Std. effect size")+
   theme_bw()
 
-#These are just point estimates of effects from independent linear regressions, but they give a general 
-  #sense of the correlations between covariates and sockeye survival. THe standardized effect size is 
-  #the change in sockeye productivity (in log space) per standard deviation unit increase in the covariate.
+#These are just point estimates of effects from independent linear regressions, but they give a general sense of the correlations between covariates and sockeye survival. THe standardized effect size is the change in sockeye productivity (in log space) per standard deviation unit increase in the covariate.
 
 ## plot full survival index time series
 ggplot(survial_indicesL, aes(brood_year, value,colour = survival_index)) +
@@ -203,6 +166,7 @@ ggplot(survial_indicesL, aes(brood_year, value,colour = survival_index)) +
   xlab("Brood year")+
   ylab("Index value")+
   theme_bw()
+
 #Note that the survival indices have been standardized (mean = zero,  std. dev. = one).
 
 ## plot survival indices for recent years with SSHI pathogen data
@@ -214,14 +178,23 @@ ggplot(survial_indicesL[survial_indicesL$brood_year>2007,], aes(brood_year, valu
   xlab("Brood year")+
   ylab("Index value")+
   theme_bw()
-#These index values are what can be related to prevalence/load profiles of out-migrating juveniles 
-  #in stage 2 of the analyses. Looks like some reasonable contrast among years and stocks. My advice 
-  #for stage 2 is to use the stock-recruit residuals without covariates as the base survival index, 
-  #and do a sensitivity analysis with the other two. 
 
-#These index values are what can be related to prevalence/load profiles of out-migrating juveniles in 
-  #stage 2 of the analyses. 
-#Looks like some reasonable contrast among years and stocks. My advice for stage 2 is to use the stock-recruit residuals 
-  #without covariates as the base survival index, and do a sensitivity analysis with the other two.
+#These index values are what can be related to prevalence/load profiles of out-migrating juveniles in stage 2 of the analyses. Looks like some reasonable contrast among years and stocks. My advice for stage 2 is to use the stock-recruit residuals without covariates as the base survival index, and do a sensitivity analysis with the other two. 
 
-write.csv(survial_indicesL[survial_indicesL$brood_year>2005,], file="data/survival_indices_truncated_210519.csv")
+write.csv(survial_indicesL[survial_indicesL$brood_year>2005,], file="data/survival_indices_truncated_210603.csv")
+
+## plot survival time series 
+plot.SR_cov_resid <- survial_indicesL[survial_indicesL$survival_index=="SR_cov_resid",]
+
+sr_plot <- ggplot(plot.SR_cov_resid, aes(brood_year, value,colour = stock_name)) +
+  geom_line(alpha=0.5)+
+  geom_smooth(aes(brood_year, value), method = "gam", col="black") +
+  xlab("Brood year")+
+  ylab("Residual stock recruitment")+
+  labs(col="Stock")+
+  theme_bw()
+
+jpeg(filename='figs/Fig_SR_plot_230203.jpg', width=700, height=355, quality=300)
+sr_plot
+dev.off()
+
